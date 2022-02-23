@@ -37,7 +37,7 @@ Table of Contents
 ## Installation
 
 ```bash
-go get -u go.opentelemetry.io/contrib/exporters/metric/cortex
+go get -u github.com/logzio/go-metrics-sdk
 ```
 
 ## Setting up the Exporter
