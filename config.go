@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cortex
+package metrics_exporter
 
 import (
 	"fmt"
@@ -46,7 +46,7 @@ var (
 	ErrInvalidQuantiles = fmt.Errorf("cannot have quantiles that are less than 0 or greater than 1")
 )
 
-// Config contains properties the Exporter uses to export metrics data to Cortex.
+// Config contains properties the Exporter uses to export metrics data to Logz.io.
 type Config struct {
 	Endpoint            string            `mapstructure:"url"`
 	RemoteTimeout       time.Duration     `mapstructure:"remote_timeout"`

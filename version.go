@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cortex
+package metrics_exporter
 
-// Version is the current release version of the Cortex exporter.
+// Version is the current release version of the metrics exporter.
 func Version() string {
 	return "0.29.0"
 	// This string is updated by the pre_release.sh script during release

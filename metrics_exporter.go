@@ -12,13 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cortex provides a Cortex exporter. It provides functionality to
-// sends cumulative metric data Cortex using the Prometheus Remote Write API.
-//
-// Deprecated: This package is no longer supported. Use the
-// go.opentelemetry.io/otel/exporters/otlp/otlpmetric exporter as a replacement
-// to send data to a collector which can then export with its PRW exporter.
-package cortex
+// Package metrics_exporter provides functionality to send cumulative metric data
+// using the Prometheus Remote Write API to Logz.io.
+package metrics_exporter
 
 import (
 	"bytes"

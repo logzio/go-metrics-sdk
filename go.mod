@@ -1,7 +1,4 @@
-// Deprecated: This module is no longer supported. Use the
-// go.opentelemetry.io/otel/exporters/otlp/otlpmetric exporter as a replacement
-// to send data to a collector which can then export with its PRW exporter.
-module go.opentelemetry.io/contrib/exporters/metric/cortex
+module metrics_exporter
 
 go 1.16
 

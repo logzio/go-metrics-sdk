@@ -1,9 +1,7 @@
-# OpenTelemetry Go SDK Prometheus Remote Write Exporter for Cortex
+# OpenTelemetry Go SDK Prometheus Remote Write Exporter
 
 This module contains an exporter that sends cumulative metrics data from the OpenTelemetry
-Go SDK to [Cortex](https://cortexmetrics.io/) using the Prometheus Remote Write API. While
-it is aimed at Cortex, it should work with other backends that ingest data with the same
-API.
+Go SDK to Logz.io using the Prometheus Remote Write API.
 
 This exporter is push-based and integrates with the OpenTelemetry Go SDK's [push
 Controller](https://github.com/open-telemetry/opentelemetry-go/blob/main/sdk/metric/controller/push/push.go).
@@ -20,7 +18,7 @@ See the `example` submodule for a working example of this exporter.
 
 Table of Contents
 =================
-   * [OpenTelemetry Go SDK Prometheus Remote Write Exporter for Cortex](#opentelemetry-go-sdk-prometheus-remote-write-exporter-for-cortex)
+   * [OpenTelemetry Go SDK Prometheus Remote Write Exporter](#opentelemetry-go-sdk-prometheus-remote-write-exporter)
    * [Table of Contents](#table-of-contents)
       * [Installation](#installation)
       * [Setting up the Exporter](#setting-up-the-exporter)
