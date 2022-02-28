@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cortex_test
+package metrics_exporter_test
 
 import (
 	"testing"
 
+	metricsExporter "github.com/logzio/go-metrics-sdk"
 	"github.com/stretchr/testify/require"
-
-	"go.opentelemetry.io/contrib/exporters/metric/cortex" // nolint:staticcheck // allow import of deprecated pkg.
 )
 
 // TestValidate checks whether Validate() returns the correct error and sets the correct
@@ -27,33 +26,33 @@ import (
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		testName       string
-		config         *cortex.Config
-		expectedConfig *cortex.Config
+		config         *metricsExporter.Config
+		expectedConfig *metricsExporter.Config
 		expectedError  error
 	}{
 		{
 			testName:       "Config with Conflicting Bearer Tokens",
 			config:         &exampleTwoBearerTokenConfig,
 			expectedConfig: nil,
-			expectedError:  cortex.ErrTwoBearerTokens,
+			expectedError:  metricsExporter.ErrTwoBearerTokens,
 		},
 		{
 			testName:       "Config with Conflicting Passwords",
 			config:         &exampleTwoPasswordConfig,
 			expectedConfig: nil,
-			expectedError:  cortex.ErrTwoPasswords,
+			expectedError:  metricsExporter.ErrTwoPasswords,
 		},
 		{
 			testName:       "Config with no Password",
 			config:         &exampleNoPasswordConfig,
 			expectedConfig: nil,
-			expectedError:  cortex.ErrNoBasicAuthPassword,
+			expectedError:  metricsExporter.ErrNoBasicAuthPassword,
 		},
 		{
 			testName:       "Config with no Username",
 			config:         &exampleNoUsernameConfig,
 			expectedConfig: nil,
-			expectedError:  cortex.ErrNoBasicAuthUsername,
+			expectedError:  metricsExporter.ErrNoBasicAuthUsername,
 		},
 		{
 			testName:       "Config with Custom Timeout",
@@ -89,13 +88,13 @@ func TestValidate(t *testing.T) {
 			testName:       "Config with both BasicAuth and BearerTokens",
 			config:         &exampleTwoAuthConfig,
 			expectedConfig: nil,
-			expectedError:  cortex.ErrConflictingAuthorization,
+			expectedError:  metricsExporter.ErrConflictingAuthorization,
 		},
 		{
 			testName:       "Config with Invalid Quantiles",
 			config:         &exampleInvalidQuantilesConfig,
 			expectedConfig: nil,
-			expectedError:  cortex.ErrInvalidQuantiles,
+			expectedError:  metricsExporter.ErrInvalidQuantiles,
 		},
 		{
 			testName:       "Config with Valid Quantiles",

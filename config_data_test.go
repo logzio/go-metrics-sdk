@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cortex_test
+package metrics_exporter_test
 
 import (
 	"time"
 
-	"go.opentelemetry.io/contrib/exporters/metric/cortex" // nolint:staticcheck // allow import of deprecated pkg.
+	metricsExporter "github.com/logzio/go-metrics-sdk"
 )
 
 // Config struct with default values. This is used to verify the output of Validate().
-var validatedStandardConfig = cortex.Config{
+var validatedStandardConfig = metricsExporter.Config{
 	Endpoint:      "/api/prom/push",
 	Name:          "Config",
 	RemoteTimeout: 30 * time.Second,
@@ -31,7 +31,7 @@ var validatedStandardConfig = cortex.Config{
 
 // Config struct with default values other than the remote timeout. This is used to verify
 // the output of Validate().
-var validatedCustomTimeoutConfig = cortex.Config{
+var validatedCustomTimeoutConfig = metricsExporter.Config{
 	Endpoint:      "/api/prom/push",
 	Name:          "Config",
 	RemoteTimeout: 10 * time.Second,
@@ -41,7 +41,7 @@ var validatedCustomTimeoutConfig = cortex.Config{
 
 // Config struct with default values other than the quantiles. This is used to verify
 // the output of Validate().
-var validatedQuantilesConfig = cortex.Config{
+var validatedQuantilesConfig = metricsExporter.Config{
 	Endpoint:      "/api/prom/push",
 	Name:          "Config",
 	RemoteTimeout: 30 * time.Second,
@@ -50,7 +50,7 @@ var validatedQuantilesConfig = cortex.Config{
 }
 
 // Example Config struct with a custom remote timeout.
-var exampleRemoteTimeoutConfig = cortex.Config{
+var exampleRemoteTimeoutConfig = metricsExporter.Config{
 	Endpoint:      "/api/prom/push",
 	Name:          "Config",
 	PushInterval:  10 * time.Second,
@@ -58,21 +58,21 @@ var exampleRemoteTimeoutConfig = cortex.Config{
 }
 
 // Example Config struct without a remote timeout.
-var exampleNoRemoteTimeoutConfig = cortex.Config{
+var exampleNoRemoteTimeoutConfig = metricsExporter.Config{
 	Endpoint:     "/api/prom/push",
 	Name:         "Config",
 	PushInterval: 10 * time.Second,
 }
 
 // Example Config struct without a push interval.
-var exampleNoPushIntervalConfig = cortex.Config{
+var exampleNoPushIntervalConfig = metricsExporter.Config{
 	Endpoint:      "/api/prom/push",
 	Name:          "Config",
 	RemoteTimeout: 30 * time.Second,
 }
 
 // Example Config struct without a http client.
-var exampleNoClientConfig = cortex.Config{
+var exampleNoClientConfig = metricsExporter.Config{
 	Endpoint:      "/api/prom/push",
 	Name:          "Config",
 	RemoteTimeout: 30 * time.Second,
@@ -80,14 +80,14 @@ var exampleNoClientConfig = cortex.Config{
 }
 
 // Example Config struct without an endpoint.
-var exampleNoEndpointConfig = cortex.Config{
+var exampleNoEndpointConfig = metricsExporter.Config{
 	Name:          "Config",
 	RemoteTimeout: 30 * time.Second,
 	PushInterval:  10 * time.Second,
 }
 
 // Example Config struct with two bearer tokens.
-var exampleTwoBearerTokenConfig = cortex.Config{
+var exampleTwoBearerTokenConfig = metricsExporter.Config{
 	Endpoint:        "/api/prom/push",
 	Name:            "Config",
 	RemoteTimeout:   30 * time.Second,
@@ -97,7 +97,7 @@ var exampleTwoBearerTokenConfig = cortex.Config{
 }
 
 // Example Config struct with two passwords.
-var exampleTwoPasswordConfig = cortex.Config{
+var exampleTwoPasswordConfig = metricsExporter.Config{
 	Endpoint:      "/api/prom/push",
 	Name:          "Config",
 	RemoteTimeout: 30 * time.Second,
@@ -110,7 +110,7 @@ var exampleTwoPasswordConfig = cortex.Config{
 }
 
 // Example Config struct with both basic auth and bearer token authentication.
-var exampleTwoAuthConfig = cortex.Config{
+var exampleTwoAuthConfig = metricsExporter.Config{
 	Endpoint:      "/api/prom/push",
 	Name:          "Config",
 	RemoteTimeout: 30 * time.Second,
@@ -123,7 +123,7 @@ var exampleTwoAuthConfig = cortex.Config{
 }
 
 // Example Config struct with no password for basic authentication.
-var exampleNoPasswordConfig = cortex.Config{
+var exampleNoPasswordConfig = metricsExporter.Config{
 	Endpoint:      "/api/prom/push",
 	Name:          "Config",
 	RemoteTimeout: 30 * time.Second,
@@ -134,7 +134,7 @@ var exampleNoPasswordConfig = cortex.Config{
 }
 
 // Example Config struct with no password for basic authentication.
-var exampleNoUsernameConfig = cortex.Config{
+var exampleNoUsernameConfig = metricsExporter.Config{
 	Endpoint:      "/api/prom/push",
 	Name:          "Config",
 	RemoteTimeout: 30 * time.Second,
@@ -145,7 +145,7 @@ var exampleNoUsernameConfig = cortex.Config{
 }
 
 // Example Config struct with invalid quantiles.
-var exampleInvalidQuantilesConfig = cortex.Config{
+var exampleInvalidQuantilesConfig = metricsExporter.Config{
 	Endpoint:      "/api/prom/push",
 	Name:          "Config",
 	RemoteTimeout: 30 * time.Second,
@@ -154,7 +154,7 @@ var exampleInvalidQuantilesConfig = cortex.Config{
 }
 
 // Example Config struct with valid quantiles.
-var exampleValidQuantilesConfig = cortex.Config{
+var exampleValidQuantilesConfig = metricsExporter.Config{
 	Endpoint:      "/api/prom/push",
 	Name:          "Config",
 	RemoteTimeout: 30 * time.Second,
