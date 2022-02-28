@@ -1,4 +1,4 @@
-module metrics_exporter
+module github.com/logzio/go-metrics-sdk
 
 go 1.16
 
