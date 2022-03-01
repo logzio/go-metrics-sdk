@@ -14,10 +14,9 @@
 
 package metrics_exporter
 
-// Version is the current release version of the metrics exporter.
+// Version is the current release version of the go-metrics-sdk.
 func Version() string {
-	return "0.29.0"
-	// This string is updated by the pre_release.sh script during release
+	return "0.1.0"
 }
 
 // SemVersion is the semantic version to be supplied to tracer/meter creation.

@@ -332,26 +332,15 @@ func createLabelSet(edata exportData, extraAttributes ...attribute.KeyValue) []p
 // addHeaders adds required headers, an Authorization header, and all headers in the
 // Config Headers map to a http request.
 func (e *Exporter) addHeaders(req *http.Request) error {
-	// Cortex expects Snappy-compressed protobuf messages. These three headers are
+	// Logz.io expects Snappy-compressed protobuf messages. These three headers are
 	// hard-coded as they should be on every request.
 	req.Header.Add("X-Prometheus-Remote-Write-Version", "0.1.0")
 	req.Header.Add("Content-Encoding", "snappy")
 	req.Header.Set("Content-Type", "application/x-protobuf")
 
-	// Add all user-supplied headers to the request.
-	for name, field := range e.config.Headers {
-		req.Header.Add(name, field)
-	}
-
-	// Add Authorization header if it wasn't already set.
-	if _, exists := e.config.Headers["Authorization"]; !exists {
-		if err := e.addBearerTokenAuth(req); err != nil {
-			return err
-		}
-		if err := e.addBasicAuth(req); err != nil {
-			return err
-		}
-	}
+	// Add Authorization header
+	bearerTokenString := "Bearer " + e.config.LogzioMetricsToken
+	req.Header.Set("Authorization", bearerTokenString)
 
 	return nil
 }
@@ -375,12 +364,12 @@ func (e *Exporter) buildMessage(timeseries []prompb.TimeSeries) ([]byte, error) 
 	return compressed, nil
 }
 
-// buildRequest creates an http POST request with a Snappy-compressed protocol buffer
+// buildRequest creates http POST request with a Snappy-compressed protocol buffer
 // message as the body and with all the headers attached.
 func (e *Exporter) buildRequest(message []byte) (*http.Request, error) {
 	req, err := http.NewRequest(
 		http.MethodPost,
-		e.config.Endpoint,
+		e.config.LogzioMetricsListener,
 		bytes.NewBuffer(message),
 	)
 	if err != nil {
@@ -396,19 +385,18 @@ func (e *Exporter) buildRequest(message []byte) (*http.Request, error) {
 	return req, nil
 }
 
-// sendRequest sends an http request using the Exporter's http Client.
+// sendRequest sends http request using the Exporter's http Client.
 func (e *Exporter) sendRequest(req *http.Request) error {
-	// Set a client if the user didn't provide one.
-	if e.config.Client == nil {
-		client, err := e.buildClient()
-		if err != nil {
-			return err
+	// Set a client if there is no client.
+	if e.config.client == nil {
+		e.config.client = &http.Client{
+			Transport: http.DefaultTransport,
+			Timeout:   e.config.RemoteTimeout,
 		}
-		e.config.Client = client
 	}
 
 	// Attempt to send request.
-	res, err := e.config.Client.Do(req)
+	res, err := e.config.client.Do(req)
 	if err != nil {
 		return err
 	}

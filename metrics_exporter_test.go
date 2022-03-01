@@ -19,7 +19,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 
@@ -41,30 +40,11 @@ var testResource = resource.NewWithAttributes(semconv.SchemaURL, attribute.Strin
 
 // ValidConfig is a Config struct that should cause no errors.
 var validConfig = Config{
-	Endpoint:      "/api/prom/push",
+	LogzioMetricsListener: "https://listener.logz.io:8053",
+	LogzioMetricsToken: "123456789a",
 	RemoteTimeout: 30 * time.Second,
-	Name:          "Valid Config Example",
-	BasicAuth: map[string]string{
-		"username": "user",
-		"password": "password",
-	},
-	BearerToken:     "",
-	BearerTokenFile: "",
-	TLSConfig: map[string]string{
-		"ca_file":              "cafile",
-		"cert_file":            "certfile",
-		"key_file":             "keyfile",
-		"server_name":          "server",
-		"insecure_skip_verify": "1",
-	},
-	ProxyURL:     nil,
 	PushInterval: 10 * time.Second,
-	Headers: map[string]string{
-		"x-prometheus-remote-write-version": "0.1.0",
-		"tenant-id":                         "123",
-	},
-	Client:    http.DefaultClient,
-	Quantiles: []float64{0, 0.25, 0.5, 0.75, 1},
+	client:    http.DefaultClient,
 }
 
 func TestTemporalityFor(t *testing.T) {
@@ -80,9 +60,7 @@ func TestTemporalityFor(t *testing.T) {
 func TestConvertToTimeSeries(t *testing.T) {
 	// Setup exporter with default quantiles and histogram buckets
 	exporter := Exporter{
-		config: Config{
-			Quantiles: []float64{0.5, 0.9, .99},
-		},
+		config: Config{},
 	}
 
 	startTime := time.Now()
@@ -192,31 +170,6 @@ func TestInstallNewPipeline(t *testing.T) {
 	}
 }
 
-// TestAddHeaders tests whether the correct headers are correctly added to a http request.
-func TestAddHeaders(t *testing.T) {
-	testConfig := Config{
-		Headers: map[string]string{
-			"TestHeaderOne": "TestFieldTwo",
-			"TestHeaderTwo": "TestFieldTwo",
-		},
-	}
-	exporter := Exporter{testConfig}
-
-	// Create http request to add headers to.
-	req, err := http.NewRequest("POST", "test.com", nil)
-	require.NoError(t, err)
-	err = exporter.addHeaders(req)
-	require.NoError(t, err)
-
-	// Check that all the headers are there.
-	for name, field := range testConfig.Headers {
-		require.Equal(t, req.Header.Get(name), field)
-	}
-	require.Equal(t, req.Header.Get("Content-Encoding"), "snappy")
-	require.Equal(t, req.Header.Get("Content-Type"), "application/x-protobuf")
-	require.Equal(t, req.Header.Get("X-Prometheus-Remote-Write-Version"), "0.1.0")
-}
-
 // TestBuildMessage tests whether BuildMessage successfully returns a Snappy-compressed
 // protobuf message.
 func TestBuildMessage(t *testing.T) {
@@ -243,16 +196,13 @@ func TestBuildRequest(t *testing.T) {
 
 	// Verify the http method, url, and body.
 	require.Equal(t, req.Method, http.MethodPost)
-	require.Equal(t, req.URL.String(), validConfig.Endpoint)
+	require.Equal(t, req.URL.String(), validConfig.LogzioMetricsListener)
 
 	reqMessage, err := ioutil.ReadAll(req.Body)
 	require.NoError(t, err)
 	require.Equal(t, reqMessage, testMessage)
 
 	// Verify headers.
-	for name, field := range exporter.config.Headers {
-		require.Equal(t, req.Header.Get(name), field)
-	}
 	require.Equal(t, req.Header.Get("Content-Encoding"), "snappy")
 	require.Equal(t, req.Header.Get("Content-Type"), "application/x-protobuf")
 	require.Equal(t, req.Header.Get("X-Prometheus-Remote-Write-Version"), "0.1.0")
@@ -325,12 +275,6 @@ func TestSendRequest(t *testing.T) {
 			expectedError:    nil,
 			isStatusNotFound: false,
 		},
-		{
-			testName:         "Export Failure",
-			config:           &Config{},
-			expectedError:    fmt.Errorf("%v", "404 Not Found"),
-			isStatusNotFound: true,
-		},
 	}
 
 	// Set up a test server to receive the request. The server responds with a 400 Bad
@@ -359,10 +303,7 @@ func TestSendRequest(t *testing.T) {
 		t.Run(test.testName, func(t *testing.T) {
 			// Set up an Exporter that uses the test server's endpoint and attaches the
 			// test's isStatusNotFound header.
-			test.config.Endpoint = server.URL
-			test.config.Headers = map[string]string{
-				"isStatusNotFound": strconv.FormatBool(test.isStatusNotFound),
-			}
+			test.config.LogzioMetricsListener = server.URL
 			exporter := Exporter{*test.config}
 
 			// Create a test TimeSeries struct.

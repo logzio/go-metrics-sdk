@@ -17,8 +17,9 @@ package metrics_exporter_test
 import (
 	"testing"
 
-	metricsExporter "github.com/logzio/go-metrics-sdk"
 	"github.com/stretchr/testify/require"
+
+	metricsExporter "github.com/logzio/go-metrics-sdk"
 )
 
 // TestValidate checks whether Validate() returns the correct error and sets the correct
@@ -31,40 +32,22 @@ func TestValidate(t *testing.T) {
 		expectedError  error
 	}{
 		{
-			testName:       "Config with Conflicting Bearer Tokens",
-			config:         &exampleTwoBearerTokenConfig,
-			expectedConfig: nil,
-			expectedError:  metricsExporter.ErrTwoBearerTokens,
-		},
-		{
-			testName:       "Config with Conflicting Passwords",
-			config:         &exampleTwoPasswordConfig,
-			expectedConfig: nil,
-			expectedError:  metricsExporter.ErrTwoPasswords,
-		},
-		{
-			testName:       "Config with no Password",
-			config:         &exampleNoPasswordConfig,
-			expectedConfig: nil,
-			expectedError:  metricsExporter.ErrNoBasicAuthPassword,
-		},
-		{
-			testName:       "Config with no Username",
-			config:         &exampleNoUsernameConfig,
-			expectedConfig: nil,
-			expectedError:  metricsExporter.ErrNoBasicAuthUsername,
-		},
-		{
 			testName:       "Config with Custom Timeout",
 			config:         &exampleRemoteTimeoutConfig,
 			expectedConfig: &validatedCustomTimeoutConfig,
 			expectedError:  nil,
 		},
 		{
-			testName:       "Config with no Endpoint",
-			config:         &exampleNoEndpointConfig,
+			testName:       "Config with no Logzio Metrics Listener",
+			config:         &exampleNoLogzioMetricsListenerConfig,
 			expectedConfig: &validatedStandardConfig,
 			expectedError:  nil,
+		},
+		{
+			testName:       "Config with no Bearer Token",
+			config:         &exampleNoLogzioMetricsTokenConfig,
+			expectedConfig: nil,
+			expectedError:  metricsExporter.ErrNoLogzioMetricsToken,
 		},
 		{
 			testName:       "Config with no Remote Timeout",
@@ -76,30 +59,6 @@ func TestValidate(t *testing.T) {
 			testName:       "Config with no Push Interval",
 			config:         &exampleNoPushIntervalConfig,
 			expectedConfig: &validatedStandardConfig,
-			expectedError:  nil,
-		},
-		{
-			testName:       "Config with no Client",
-			config:         &exampleNoClientConfig,
-			expectedConfig: &validatedStandardConfig,
-			expectedError:  nil,
-		},
-		{
-			testName:       "Config with both BasicAuth and BearerTokens",
-			config:         &exampleTwoAuthConfig,
-			expectedConfig: nil,
-			expectedError:  metricsExporter.ErrConflictingAuthorization,
-		},
-		{
-			testName:       "Config with Invalid Quantiles",
-			config:         &exampleInvalidQuantilesConfig,
-			expectedConfig: nil,
-			expectedError:  metricsExporter.ErrInvalidQuantiles,
-		},
-		{
-			testName:       "Config with Valid Quantiles",
-			config:         &exampleValidQuantilesConfig,
-			expectedConfig: &validatedQuantilesConfig,
 			expectedError:  nil,
 		},
 	}
