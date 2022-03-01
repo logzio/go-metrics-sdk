@@ -22,7 +22,10 @@ import (
 
 var (
 	// ErrNoLogzioMetricsToken occurs when no Logz.io metrics token was provided for authorization.
-	ErrNoLogzioMetricsToken = fmt.Errorf("Logz.io metrics token must not be empty")
+	ErrNoLogzioMetricsToken = fmt.Errorf("no Logz.io metrics token provided")
+
+	// ErrInvalidQuantiles occurs when the supplied quantiles are not between 0 and 1.
+	ErrInvalidQuantiles = fmt.Errorf("cannot have quantiles that are less than 0 or greater than 1")
 )
 
 // Config contains properties the Exporter uses to export metrics data to Logz.io.
@@ -31,6 +34,7 @@ type Config struct {
 	LogzioMetricsToken    string
 	RemoteTimeout         time.Duration
 	PushInterval          time.Duration
+	Quantiles			  []float64
 	HistogramBoundaries   []float64
 
 	client                *http.Client
@@ -44,6 +48,15 @@ func (c *Config) Validate() error {
 		return ErrNoLogzioMetricsToken
 	}
 
+	// Verify that provided quantiles are between 0 and 1.
+	if c.Quantiles != nil {
+		for _, quantile := range c.Quantiles {
+			if quantile < 0 || quantile > 1 {
+				return ErrInvalidQuantiles
+			}
+		}
+	}
+
 	// Add default values for missing properties.
 	if c.LogzioMetricsListener == "" {
 		c.LogzioMetricsListener = "https://listener.logz.io:8053"
@@ -54,6 +67,9 @@ func (c *Config) Validate() error {
 	// Default time interval between pushes for the push controller is 10s.
 	if c.PushInterval == 0 {
 		c.PushInterval = 10 * time.Second
+	}
+	if c.Quantiles == nil {
+		c.Quantiles = []float64{0.5, 0.9, 0.95, 0.99}
 	}
 
 	return nil
