@@ -44,6 +44,7 @@ var validConfig = Config{
 	LogzioMetricsToken:    "123456789a",
 	RemoteTimeout:         30 * time.Second,
 	PushInterval:          10 * time.Second,
+	Quantiles:			   []float64{0, 0.25, 0.5, 0.75, 1},
 	client:                http.DefaultClient,
 }
 
@@ -143,7 +144,25 @@ func TestNewRawExporter(t *testing.T) {
 		t.Fatalf("Failed to create exporter with error %v", err)
 	}
 
-	if !cmp.Equal(validConfig, exporter.config) {
+	if !cmp.Equal(validConfig.LogzioMetricsListener, exporter.config.LogzioMetricsListener) {
+		t.Fatalf("Got configuration %v, wanted %v", exporter.config, validConfig)
+	}
+	if !cmp.Equal(validConfig.LogzioMetricsToken, exporter.config.LogzioMetricsToken) {
+		t.Fatalf("Got configuration %v, wanted %v", exporter.config, validConfig)
+	}
+	if !cmp.Equal(validConfig.RemoteTimeout, exporter.config.RemoteTimeout) {
+		t.Fatalf("Got configuration %v, wanted %v", exporter.config, validConfig)
+	}
+	if !cmp.Equal(validConfig.PushInterval, exporter.config.PushInterval) {
+		t.Fatalf("Got configuration %v, wanted %v", exporter.config, validConfig)
+	}
+	if !cmp.Equal(validConfig.Quantiles, exporter.config.Quantiles) {
+		t.Fatalf("Got configuration %v, wanted %v", exporter.config, validConfig)
+	}
+	if !cmp.Equal(validConfig.HistogramBoundaries, exporter.config.HistogramBoundaries) {
+		t.Fatalf("Got configuration %v, wanted %v", exporter.config, validConfig)
+	}
+	if !cmp.Equal(validConfig.client, exporter.config.client) {
 		t.Fatalf("Got configuration %v, wanted %v", exporter.config, validConfig)
 	}
 }
