@@ -41,10 +41,10 @@ var testResource = resource.NewWithAttributes(semconv.SchemaURL, attribute.Strin
 // ValidConfig is a Config struct that should cause no errors.
 var validConfig = Config{
 	LogzioMetricsListener: "https://listener.logz.io:8053",
-	LogzioMetricsToken: "123456789a",
-	RemoteTimeout: 30 * time.Second,
-	PushInterval: 10 * time.Second,
-	client:    http.DefaultClient,
+	LogzioMetricsToken:    "123456789a",
+	RemoteTimeout:         30 * time.Second,
+	PushInterval:          10 * time.Second,
+	client:                http.DefaultClient,
 }
 
 func TestTemporalityFor(t *testing.T) {
