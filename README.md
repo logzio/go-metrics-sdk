@@ -322,86 +322,88 @@ The end result is the same since the aggregations are cumulative.
 package main
 
 import (
-  "context"
-  "fmt"
-  "math/rand"
-  "time"
+    "context"
+    "fmt"
+    "math/rand"
+    "time"
 
-  metricsExporter "github.com/logzio/go-metrics-sdk"
-  "go.opentelemetry.io/otel/attribute"
-  "go.opentelemetry.io/otel/metric"
-  controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-  "go.opentelemetry.io/otel/sdk/resource"
-  semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+    metricsExporter "github.com/logzio/go-metrics-sdk"
+    "go.opentelemetry.io/otel/attribute"
+    "go.opentelemetry.io/otel/metric"
+    controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+    "go.opentelemetry.io/otel/sdk/resource"
+    semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 )
 
 func main() {
-  // Create Config struct.
-  config := metricsExporter.Config{
-    LogzioMetricsListener: "<<LOGZIO_METRICS_LISTENER>>",
-    LogzioMetricsToken:    "<<LOGZIO_METRICS_TOKEN>>",
-    RemoteTimeout:         30 * time.Second,
-    PushInterval:          15 * time.Second,
-  }
+    // Create Config struct.
+    config := metricsExporter.Config{
+        LogzioMetricsListener: "<<LOGZIO_METRICS_LISTENER>>",
+        LogzioMetricsToken:    "<<LOGZIO_METRICS_TOKEN>>",
+        RemoteTimeout:         30 * time.Second,
+        PushInterval:          15 * time.Second,
+    }
 
-  // Create and install the exporter. Additionally, set the push interval to 5 seconds
-  // and add a resource to the controller.
-  cont, err := metricsExporter.InstallNewPipeline(
-    config,
-    controller.WithCollectPeriod(5*time.Second),
-    controller.WithResource(resource.NewWithAttributes(
-      semconv.SchemaURL,
-      attribute.String("KEY", "VALUE")),
-    ),
-  )
-  if err != nil {
-    panic(fmt.Errorf("error: %v", err))
-  }
+    // Create and install the exporter. Additionally, set the push interval to 5 seconds
+    // and add a resource to the controller.
+    cont, err := metricsExporter.InstallNewPipeline(
+        config,
+        controller.WithCollectPeriod(5*time.Second),
+        controller.WithResource(
+            resource.NewWithAttributes(
+                semconv.SchemaURL,
+                attribute.String("KEY", "VALUE"),
+            ),
+        ),
+    )
+    if err != nil {
+        panic(fmt.Errorf("error: %v", err))
+    }
 
-  ctx := context.Background()
-  defer func() {
-    handleErr(cont.Stop(ctx))
-  }()
+    ctx := context.Background()
+    defer func() {
+        handleErr(cont.Stop(ctx))
+    }()
 
-  fmt.Println("Success: Installed Exporter Pipeline")
+    fmt.Println("Success: Installed Exporter Pipeline")
 
-  // Create a counter and histogram
-  meter := cont.Meter("example")
+    // Create a counter and histogram
+    meter := cont.Meter("example")
 
-  // Create metric instruments
-  histogram := metric.Must(meter).NewInt64Histogram(
-    "example.histogram",
-    metric.WithDescription("Records values"),
-  )
-  counter := metric.Must(meter).NewInt64Counter(
-    "example.counter",
-    metric.WithDescription("Counts things"),
-  )
+    // Create metric instruments
+    histogram := metric.Must(meter).NewInt64Histogram(
+        "example.histogram",
+        metric.WithDescription("Records values"),
+    )
+    counter := metric.Must(meter).NewInt64Counter(
+        "example.counter",
+        metric.WithDescription("Counts things"),
+    )
 
-  fmt.Println("Success: Created Int64Histogram and Int64Counter instruments!")
+    fmt.Println("Success: Created Int64Histogram and Int64Counter instruments!")
 
-  // Record random values to the metric instruments in a loop
-  fmt.Println("Starting to write data to the metric instruments!")
+    // Record random values to the metric instruments in a loop
+    fmt.Println("Starting to write data to the metric instruments!")
 
-  seed := rand.NewSource(time.Now().UnixNano())
-  random := rand.New(seed)
+    seed := rand.NewSource(time.Now().UnixNano())
+    random := rand.New(seed)
 
-  for {
-    time.Sleep(1 * time.Second)
+    for {
+        time.Sleep(1 * time.Second)
 
-    randomValue := random.Intn(100)
-    value := int64(randomValue * 10)
+        randomValue := random.Intn(100)
+        value := int64(randomValue * 10)
 
-    histogram.Record(ctx, value, attribute.String("key", "value"))
-    counter.Add(ctx, int64(randomValue), attribute.String("key", "value"))
+        histogram.Record(ctx, value, attribute.String("key", "value"))
+        counter.Add(ctx, int64(randomValue), attribute.String("key", "value"))
 
-    fmt.Printf("Adding %d to counter and recording %d in histogram\n", randomValue, value)
-  }
+        fmt.Printf("Adding %d to counter and recording %d in histogram\n", randomValue, value)
+    }
 }
 
 func handleErr(err error) {
-  if err != nil {
-    panic(fmt.Errorf("encountered error: %v", err))
-  }
+    if err != nil {
+        panic(fmt.Errorf("encountered error: %v", err))
+    }
 }
 ```
