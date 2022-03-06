@@ -42,7 +42,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 )
 
-// Exporter forwards metrics to a Cortex instance
+// Exporter forwards metrics to Logz.io
 type Exporter struct {
 	config Config
 }
@@ -58,7 +58,7 @@ func (e *Exporter) TemporalityFor(*sdkapi.Descriptor, aggregation.Kind) aggregat
 	return aggregation.CumulativeTemporality
 }
 
-// Export forwards metrics to Cortex from the SDK
+// Export forwards metrics to Logz.io from the SDK
 func (e *Exporter) Export(_ context.Context, res *resource.Resource, checkpointSet export.InstrumentationLibraryReader) error {
 	timeseries, err := e.ConvertToTimeSeries(res, checkpointSet)
 	if err != nil {
@@ -207,7 +207,7 @@ func convertFromSum(edata exportData, sum aggregation.Sum) (prompb.TimeSeries, e
 		return prompb.TimeSeries{}, err
 	}
 
-	// Create TimeSeries. Note that Cortex requires the name attribute to be in the format
+	// Create TimeSeries. Note that Logz.io requires the name attribute to be in the format
 	// "__name__". This is the case for all time series created by this exporter.
 	name := sanitize(edata.Descriptor().Name())
 	numberKind := edata.Descriptor().NumberKind()
@@ -347,7 +347,7 @@ func (e *Exporter) addHeaders(req *http.Request) error {
 
 // buildMessage creates a Snappy-compressed protobuf message from a slice of TimeSeries.
 func (e *Exporter) buildMessage(timeseries []prompb.TimeSeries) ([]byte, error) {
-	// Wrap the TimeSeries as a WriteRequest since Cortex requires it.
+	// Wrap the TimeSeries as a WriteRequest since Logz.io requires it.
 	writeRequest := &prompb.WriteRequest{
 		Timeseries: timeseries,
 	}
