@@ -4,7 +4,7 @@ Create custom metrics in your Go application and ship them to Logz.io,
 using the exporter that sends cumulative metrics data from the OpenTelemetry
 Go SDK to Logz.io using the Prometheus Remote Write API.
 
-This exporter is push-based and integrates with the OpenTelemetry Go SDK's [Controller](https://github.com/open-telemetry/opentelemetry-go/blob/main/sdk/metric/controller/basic/controller.go).
+This exporter integrates with the OpenTelemetry Go SDK's [Controller](https://github.com/open-telemetry/opentelemetry-go/blob/main/sdk/metric/controller/basic/controller.go).
 The Controller periodically collects data and passes it to this exporter. The exporter
 then converts this data into
 [`TimeSeries`](https://prometheus.io/docs/concepts/data_model/), a format that Logz.io
