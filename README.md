@@ -100,7 +100,7 @@ cont, err := metricsExporter.InstallNewPipeline(
     controller.WithResource(
         resource.NewWithAttributes(
             semconv.SchemaURL,
-            attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>>"),
+            attribute.<<TYPE>>("<<LABEL_KEY>>", "<<LABEL_VALUE>>"),
         ),
     ),
 )
