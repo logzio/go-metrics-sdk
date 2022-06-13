@@ -49,7 +49,7 @@ import (
 
 config := metricsExporter.Config {
 	LogzioMetricsListener: "<<LOGZIO_METRICS_LISTENER>>",
-	LogzioMetricsToken:    "<<LOGZIO_METRICS_TOKEN>>"
+	LogzioMetricsToken:    "<<LOGZIO_METRICS_TOKEN>>",
 	RemoteTimeout:         30 * time.Second,
 	PushInterval:          5 * time.Second,
 }
@@ -100,7 +100,7 @@ cont, err := metricsExporter.InstallNewPipeline(
     controller.WithResource(
         resource.NewWithAttributes(
             semconv.SchemaURL,
-            attribute.String("LABEL_KEY", "LABEL_VALUE"),
+            attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>>"),
         ),
     ),
 )
