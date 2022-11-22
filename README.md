@@ -29,7 +29,7 @@ for more details on the Remote Write API.
 ## Installation
 
 ```bash
-go get -u github.com/logzio/go-metrics-sdk
+go get github.com/logzio/go-metrics-sdk
 ```
 
 ## Configuring the Exporter
@@ -44,6 +44,8 @@ Replace `<<LOGZIO_METRICS_TOKEN>>` with your Logz.io metrics token.
 ```go
 import (
     metricsExporter "github.com/logzio/go-metrics-sdk"
+    controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+    semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
     // ...
 )
 
