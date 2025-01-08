@@ -16,6 +16,8 @@ package metrics_exporter
 
 import (
 	"fmt"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -28,10 +30,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheusremotewrite"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric/global"
-	"go.opentelemetry.io/otel/sdk/metric/export"
-	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 )
@@ -44,17 +44,23 @@ var validConfig = Config{
 	LogzioMetricsToken:    "123456789a",
 	RemoteTimeout:         30 * time.Second,
 	PushInterval:          10 * time.Second,
-	Quantiles:			   []float64{0, 0.25, 0.5, 0.75, 1},
-	client:                http.DefaultClient,
+	Quantiles:             []float64{0, 0.25, 0.5, 0.75, 1},
+	ExporterSettings: prometheusremotewrite.Settings{
+		AddMetricSuffixes: true,
+		ExternalLabels: map[string]string{
+			"label": "value",
+		},
+	},
+	client: http.DefaultClient,
 }
 
-func TestTemporalityFor(t *testing.T) {
+func TestTemporality(t *testing.T) {
 	exporter := Exporter{}
-	got := exporter.TemporalityFor(nil, aggregation.Kind(rune(0)))
-	want := aggregation.CumulativeTemporality
+	got := exporter.Temporality(metric.InstrumentKindCounter)
+	want := metricdata.CumulativeTemporality
 
 	if got != want {
-		t.Errorf("TemporalityFor() =  %q, want %q", got, want)
+		t.Errorf("Temporality() =  %q, want %q", got, want)
 	}
 }
 
@@ -68,27 +74,27 @@ func TestConvertToTimeSeries(t *testing.T) {
 	// Test conversions based on aggregation type
 	tests := []struct {
 		name       string
-		input      export.InstrumentationLibraryReader
+		input      *metricdata.ResourceMetrics
 		want       []*prompb.TimeSeries
 		wantLength int
 	}{
 		{
 			name:       "convertFromSum",
-			input:      getSumReader(t, 1, 2, 3, 4, 5),
+			input:      getSumMetric(5),
 			want:       wantSumTimeSeries,
 			wantLength: 1,
 		},
 		{
-			name:       "convertFromLastValue",
-			input:      getLastValueReader(t, 1, 2, 3, 4, 5),
-			want:       wantLastValueTimeSeries,
+			name:       "convertFromGauge",
+			input:      getGaugeMetric(5),
+			want:       wantGaugeTimeSeries,
 			wantLength: 1,
 		},
 		{
 			name:       "convertFromHistogram",
-			input:      getHistogramReader(t),
+			input:      getHistogramMetric(1, metricdata.NewExtrema[int64](2), metricdata.NewExtrema[int64](2), 2),
 			want:       wantHistogramTimeSeries,
-			wantLength: 6,
+			wantLength: 7,
 		},
 	}
 
@@ -96,7 +102,7 @@ func TestConvertToTimeSeries(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := exporter.ConvertToTimeSeries(testResource, tt.input)
+			got, err := exporter.ConvertToTimeSeries(tt.input)
 			want := tt.want
 
 			// Check for errors and for the correct number of timeseries.
@@ -114,11 +120,11 @@ func TestConvertToTimeSeries(t *testing.T) {
 			wantSamples := make(map[string]bool)
 
 			for i := 0; i < len(got); i++ {
-				for _, attribute := range got[i].Labels {
-					gotAttributes[attribute.String()] = true
+				for _, attr := range got[i].Labels {
+					gotAttributes[attr.String()] = true
 				}
-				for _, attribute := range want[i].Labels {
-					wantAttributes[attribute.String()] = true
+				for _, attr := range want[i].Labels {
+					wantAttributes[attr.String()] = true
 				}
 				for _, sample := range got[i].Samples {
 					gotSamples[fmt.Sprint(sample.Value)] = true
@@ -138,8 +144,8 @@ func TestConvertToTimeSeries(t *testing.T) {
 
 // TestNewRawExporter tests whether NewRawExporter successfully creates an Exporter with
 // the same Config struct as the one passed in.
-func TestNewRawExporter(t *testing.T) {
-	exporter, err := NewRawExporter(validConfig)
+func TestNew(t *testing.T) {
+	exporter, err := New(validConfig)
 	if err != nil {
 		t.Fatalf("Failed to create exporter with error %v", err)
 	}
@@ -164,28 +170,6 @@ func TestNewRawExporter(t *testing.T) {
 	}
 	if !cmp.Equal(validConfig.client, exporter.config.client) {
 		t.Fatalf("Got configuration %v, wanted %v", exporter.config, validConfig)
-	}
-}
-
-// TestNewExportPipeline tests whether a push Controller was successfully created with an
-// Exporter from NewRawExporter. Errors in this function will be from calls to push
-// controller package and NewRawExport. Both have their own tests.
-func TestNewExportPipeline(t *testing.T) {
-	_, err := NewExportPipeline(validConfig)
-	if err != nil {
-		t.Fatalf("Failed to create export pipeline with error %v", err)
-	}
-}
-
-// TestInstallNewPipeline checks whether InstallNewPipeline successfully returns a push
-// Controller and whether that controller's MeterProvider is registered globally.
-func TestInstallNewPipeline(t *testing.T) {
-	cont, err := InstallNewPipeline(validConfig)
-	if err != nil {
-		t.Fatalf("Failed to create install pipeline with error %v", err)
-	}
-	if global.GetMeterProvider() != cont {
-		t.Fatalf("Failed to register push Controller provider globally")
 	}
 }
 

@@ -28,6 +28,9 @@ func sanitize(s string) string {
 	}
 
 	s = strings.Map(sanitizeRune, s)
+	if s == "__name__" {
+		return s
+	}
 	if unicode.IsDigit(rune(s[0])) {
 		s = "key_" + s
 	}

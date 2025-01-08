@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheusremotewrite"
 )
 
 var (
@@ -36,8 +38,8 @@ type Config struct {
 	PushInterval          time.Duration
 	Quantiles             []float64
 	HistogramBoundaries   []float64
-
-	client *http.Client
+	ExporterSettings      prometheusremotewrite.Settings
+	client                *http.Client
 }
 
 // Validate checks a Config struct for missing required properties and property conflicts.

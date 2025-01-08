@@ -19,27 +19,32 @@ package metrics_exporter
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
-	"log"
+	"github.com/hashicorp/go-multierror"
+	"maps"
+
+	"go.opentelemetry.io/otel/sdk/instrumentation"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/golang/snappy"
 	"github.com/prometheus/prometheus/prompb"
 
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric/global"
-	"go.opentelemetry.io/otel/metric/number"
-	"go.opentelemetry.io/otel/metric/sdkapi"
-	"go.opentelemetry.io/otel/sdk/instrumentation"
-	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
-	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-	"go.opentelemetry.io/otel/sdk/metric/export"
-	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
-	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
-	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	"go.opentelemetry.io/otel/sdk/resource"
+)
+
+var (
+	traceIdLabelName          = "trace_id"
+	spanIdLabelName           = "span_id"
+	histogramSumSuffix        = "_sum"
+	histogramMaxSuffix        = "_max"
+	histogramMinSuffix        = "_min"
+	histogramCountSuffix      = "_count"
+	histogramLastBucketSuffix = "+inf" // Default for the last bucket
 )
 
 // Exporter forwards metrics to Logz.io
@@ -47,20 +52,24 @@ type Exporter struct {
 	config Config
 }
 
-type exportData struct {
-	export.Record
+// New returns a Logzio Prometheus remote write Exporter.
+func New(config Config) (*Exporter, error) {
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
 
-	Resource *resource.Resource
+	exporter := Exporter{config}
+	return &exporter, nil
 }
 
-// TemporalityFor returns CumulativeExporter so the Processor correctly aggregates data
-func (e *Exporter) TemporalityFor(*sdkapi.Descriptor, aggregation.Kind) aggregation.Temporality {
-	return aggregation.CumulativeTemporality
+// Temporality returns CumulativeExporter so the Processor correctly aggregates data
+func (e *Exporter) Temporality(_ metric.InstrumentKind) metricdata.Temporality {
+	return metricdata.CumulativeTemporality
 }
 
 // Export forwards metrics to Logz.io from the SDK
-func (e *Exporter) Export(_ context.Context, res *resource.Resource, checkpointSet export.InstrumentationLibraryReader) error {
-	timeseries, err := e.ConvertToTimeSeries(res, checkpointSet)
+func (e *Exporter) Export(_ context.Context, rm *metricdata.ResourceMetrics) error {
+	timeseries, err := e.ConvertToTimeSeries(rm)
 	if err != nil {
 		return err
 	}
@@ -83,247 +92,248 @@ func (e *Exporter) Export(_ context.Context, res *resource.Resource, checkpointS
 	return nil
 }
 
-// NewRawExporter validates the Config struct and creates an Exporter with it.
-func NewRawExporter(config Config) (*Exporter, error) {
-	// This is redundant when the user creates the Config struct with the NewConfig
-	// function.
-	if err := config.Validate(); err != nil {
-		return nil, err
-	}
-
-	exporter := Exporter{config}
-	return &exporter, nil
-}
-
-// NewExportPipeline sets up a complete export pipeline with a push Controller and
-// Exporter.
-func NewExportPipeline(config Config, options ...controller.Option) (*controller.Controller, error) {
-	exporter, err := NewRawExporter(config)
-	if err != nil {
-		return nil, err
-	}
-
-	cont := controller.New(
-		processor.NewFactory(
-			simple.NewWithHistogramDistribution(
-				histogram.WithExplicitBoundaries(config.HistogramBoundaries),
-			),
-			exporter,
-		),
-		append(options, controller.WithExporter(exporter))...,
-	)
-
-	return cont, cont.Start(context.TODO())
-}
-
-// InstallNewPipeline registers a push Controller's MeterProvider globally.
-func InstallNewPipeline(config Config, options ...controller.Option) (*controller.Controller, error) {
-	cont, err := NewExportPipeline(config, options...)
-	if err != nil {
-		return nil, err
-	}
-	global.SetMeterProvider(cont)
-	return cont, nil
-}
-
 // ConvertToTimeSeries converts a InstrumentationLibraryReader to a slice of TimeSeries pointers
 // Based on the aggregation type, ConvertToTimeSeries will call helper functions like
 // convertFromSum to generate the correct number of TimeSeries.
-func (e *Exporter) ConvertToTimeSeries(res *resource.Resource, checkpointSet export.InstrumentationLibraryReader) ([]prompb.TimeSeries, error) {
-	var aggError error
+func (e *Exporter) ConvertToTimeSeries(rm *metricdata.ResourceMetrics) ([]prompb.TimeSeries, error) {
 	var timeSeries []prompb.TimeSeries
+	var result *multierror.Error
+
+	labelsMap := generateGlobalLabels(rm.Resource, e.config.ExporterSettings.ExternalLabels)
 
 	// Iterate over each record in the checkpoint set and convert to TimeSeries
-	aggError = checkpointSet.ForEach(func(library instrumentation.Library, reader export.Reader) error {
-		return reader.ForEach(e, func(record export.Record) error {
-			// Convert based on aggregation type
-			edata := exportData{
-				Resource: res,
-				Record:   record,
-			}
-			agg := record.Aggregation()
+	for _, sm := range rm.ScopeMetrics {
+		maps.Copy(labelsMap, generateScopeLabels(sm.Scope))
 
-			// The following section uses loose type checking to determine how to
-			// convert aggregations to timeseries. More "expensive" timeseries are
-			// checked first.
-			//
-			// See the Aggregator Kind for more information
-			// https://github.com/open-telemetry/opentelemetry-go/blob/main/sdk/export/metric/aggregation/aggregation.go#L123-L138
-			if histogram, ok := agg.(aggregation.Histogram); ok {
-				tSeries, err := convertFromHistogram(edata, histogram)
-				if err != nil {
-					return err
-				}
-				timeSeries = append(timeSeries, tSeries...)
-			} else if sum, ok := agg.(aggregation.Sum); ok {
-				tSeries, err := convertFromSum(edata, sum)
-				if err != nil {
-					return err
-				}
-				timeSeries = append(timeSeries, tSeries)
-			} else if lastValue, ok := agg.(aggregation.LastValue); ok {
-				tSeries, err := convertFromLastValue(edata, lastValue)
-				if err != nil {
-					return err
-				}
-				timeSeries = append(timeSeries, tSeries)
-			} else {
-				// Report to the user when no conversion was found
-				fmt.Printf("No conversion found for record: %s\n", edata.Descriptor().Name())
+		for _, m := range sm.Metrics {
+			metricName := m.Name
+			if e.config.ExporterSettings.AddMetricSuffixes {
+				metricName = metricName + "_" + m.Unit
 			}
 
-			return nil
-		})
-	})
-
-	// Check if error was returned in checkpointSet.ForEach()
-	if aggError != nil {
-		return nil, aggError
+			switch data := m.Data.(type) {
+			case metricdata.Sum[int64]:
+				ts, err := convertFromSum(metricName, data, labelsMap)
+				if err != nil {
+					result = multierror.Append(result, err)
+				} else {
+					timeSeries = append(timeSeries, ts...)
+				}
+			case metricdata.Sum[float64]:
+				ts, err := convertFromSum(metricName, data, labelsMap)
+				if err != nil {
+					result = multierror.Append(result, err)
+				} else {
+					timeSeries = append(timeSeries, ts...)
+				}
+			case metricdata.Gauge[int64]:
+				ts, err := convertFromGauge(metricName, data, labelsMap)
+				if err != nil {
+					result = multierror.Append(result, err)
+				} else {
+					timeSeries = append(timeSeries, ts...)
+				}
+			case metricdata.Gauge[float64]:
+				ts, err := convertFromGauge(metricName, data, labelsMap)
+				if err != nil {
+					result = multierror.Append(result, err)
+				} else {
+					timeSeries = append(timeSeries, ts...)
+				}
+			case metricdata.Histogram[int64]:
+				ts, err := convertFromHistogram(metricName, data, labelsMap)
+				if err != nil {
+					result = multierror.Append(result, err)
+				} else {
+					timeSeries = append(timeSeries, ts...)
+				}
+			case metricdata.Histogram[float64]:
+				ts, err := convertFromHistogram(metricName, data, labelsMap)
+				if err != nil {
+					result = multierror.Append(result, err)
+				} else {
+					timeSeries = append(timeSeries, ts...)
+				}
+			default:
+				result = multierror.Append(result, fmt.Errorf("Unsupported metric type: %T\n", data))
+			}
+		}
 	}
 
-	return timeSeries, nil
+	return timeSeries, result.ErrorOrNil()
 }
 
 // createTimeSeries is a helper function to create a timeseries from a value and attributes
-func createTimeSeries(edata exportData, value number.Number, valueNumberKind number.Kind, extraAttributes ...attribute.KeyValue) prompb.TimeSeries {
+func createTimeSeries(value float64, ts time.Time, labels map[string]string, exemplars []prompb.Exemplar) prompb.TimeSeries {
+	// We generate a sample per datapoint, because OTEL handles merging of datapoint with the same labels and name.
+	// Therefore, if there are multiple data points >> they necessarily have different Attributes >> meaning they are
+	// different timeseries.
 	sample := prompb.Sample{
-		Value:     value.CoerceToFloat64(valueNumberKind),
-		Timestamp: int64(time.Nanosecond) * edata.EndTime().UnixNano() / int64(time.Millisecond),
+		Value:     value,
+		Timestamp: ts.UnixNano() / int64(time.Millisecond),
 	}
-
-	attributes := createLabelSet(edata, extraAttributes...)
-
 	return prompb.TimeSeries{
-		Samples: []prompb.Sample{sample},
-		Labels:  attributes,
+		Samples:   []prompb.Sample{sample},
+		Labels:    createLabelSet(labels),
+		Exemplars: exemplars,
 	}
 }
 
 // convertFromSum returns a single TimeSeries based on a Record with a Sum aggregation
-func convertFromSum(edata exportData, sum aggregation.Sum) (prompb.TimeSeries, error) {
-	// Get Sum value
-	value, err := sum.Sum()
-	if err != nil {
-		return prompb.TimeSeries{}, err
-	}
-
-	// Create TimeSeries. Note that Logz.io requires the name attribute to be in the format
-	// "__name__". This is the case for all time series created by this exporter.
-	name := sanitize(edata.Descriptor().Name())
-	numberKind := edata.Descriptor().NumberKind()
-	tSeries := createTimeSeries(edata, value, numberKind, attribute.String("__name__", name))
-
-	return tSeries, nil
-}
-
-// convertFromLastValue returns a single TimeSeries based on a Record with a LastValue aggregation
-func convertFromLastValue(edata exportData, lastValue aggregation.LastValue) (prompb.TimeSeries, error) {
-	// Get value
-	value, _, err := lastValue.LastValue()
-	if err != nil {
-		return prompb.TimeSeries{}, err
-	}
-
-	// Create TimeSeries
-	name := sanitize(edata.Descriptor().Name())
-	numberKind := edata.Descriptor().NumberKind()
-	tSeries := createTimeSeries(edata, value, numberKind, attribute.String("__name__", name))
-
-	return tSeries, nil
-}
-
-// convertFromHistogram returns len(histogram.Buckets) timeseries for a histogram aggregation
-func convertFromHistogram(edata exportData, histogram aggregation.Histogram) ([]prompb.TimeSeries, error) {
+func convertFromSum[N int64 | float64](metricName string, sum metricdata.Sum[N], labels map[string]string) ([]prompb.TimeSeries, error) {
 	var timeSeries []prompb.TimeSeries
-	metricName := sanitize(edata.Descriptor().Name())
-	numberKind := edata.Descriptor().NumberKind()
+	var dpLabels map[string]string
 
-	// Create Sum TimeSeries
-	sum, err := histogram.Sum()
-	if err != nil {
-		return nil, err
+	for _, dp := range sum.DataPoints {
+		var ex []prompb.Exemplar
+		dpLabels = generateDataPointLabels(metricName, labels, dp.Attributes)
+		// sum.IsMonotonic is true for prometheus.CounterValue, false for prometheus.GaugeValue
+		// GaugeValues don't support Exemplars at this time
+		// ref: https://github.com/prometheus/client_golang/blob/aef8aedb4b6e1fb8ac1c90790645169125594096/prometheus/metric.go#L199
+		if sum.IsMonotonic {
+			ex = generateExamplers(dp.Exemplars)
+		}
+
+		// we take the Time and not StartTime, because the Timestamp should be the time when the datapoint was recorded
+		timeSeries = append(timeSeries, createTimeSeries(float64(dp.Value), dp.Time, dpLabels, ex))
 	}
-	sumTimeSeries := createTimeSeries(edata, sum, numberKind, attribute.String("__name__", metricName+"_sum"))
-	timeSeries = append(timeSeries, sumTimeSeries)
-
-	// Handle Histogram buckets
-	buckets, err := histogram.Histogram()
-	if err != nil {
-		return nil, err
-	}
-
-	var totalCount float64
-	// counts maps from the bucket upper-bound to the cumulative count.
-	// The bucket with upper-bound +inf is not included.
-	counts := make(map[float64]float64, len(buckets.Boundaries))
-	for i, boundary := range buckets.Boundaries {
-		// Add bucket count to totalCount and record in map
-		totalCount += float64(buckets.Counts[i])
-		counts[boundary] = totalCount
-
-		// Add upper boundary as a attribute. e.g. {le="5"}
-		boundaryStr := strconv.FormatFloat(boundary, 'f', -1, 64)
-
-		// Create timeSeries and append
-		boundaryTimeSeries := createTimeSeries(edata, number.NewFloat64Number(totalCount), number.Float64Kind, attribute.String("__name__", metricName), attribute.String("le", boundaryStr))
-		timeSeries = append(timeSeries, boundaryTimeSeries)
-	}
-
-	// Include the +inf boundary in the total count
-	totalCount += float64(buckets.Counts[len(buckets.Counts)-1])
-
-	// Create a timeSeries for the +inf bucket and total count
-	// These are the same and are both required by Prometheus-based backends
-
-	upperBoundTimeSeries := createTimeSeries(edata, number.NewFloat64Number(totalCount), number.Float64Kind, attribute.String("__name__", metricName), attribute.String("le", "+inf"))
-
-	countTimeSeries := createTimeSeries(edata, number.NewFloat64Number(totalCount), number.Float64Kind, attribute.String("__name__", metricName+"_count"))
-
-	timeSeries = append(timeSeries, upperBoundTimeSeries)
-	timeSeries = append(timeSeries, countTimeSeries)
 
 	return timeSeries, nil
 }
 
+// convertFromGauge returns a TimeSeries based on a Record with a Gauge aggregation
+func convertFromGauge[N int64 | float64](metricName string, gauge metricdata.Gauge[N], labels map[string]string) ([]prompb.TimeSeries, error) {
+	var timeSeries []prompb.TimeSeries
+	var dpLabels map[string]string
+
+	for _, dp := range gauge.DataPoints {
+		dpLabels = generateDataPointLabels(metricName, labels, dp.Attributes)
+
+		// GaugeValues don't support Exemplars at this time
+		// ref: https://github.com/prometheus/client_golang/blob/aef8aedb4b6e1fb8ac1c90790645169125594096/prometheus/metric.go#L199
+		// also, we take the Time and not StartTime, because the Timestamp should be the time when the datapoint was recorded
+		timeSeries = append(timeSeries, createTimeSeries(float64(dp.Value), dp.Time, dpLabels, nil))
+	}
+	return timeSeries, nil
+}
+
+// convertFromHistogram returns len(histogram.Buckets) timeseries for a histogram aggregation
+func convertFromHistogram[N int64 | float64](metricName string, histogram metricdata.Histogram[N], labels map[string]string) ([]prompb.TimeSeries, error) {
+	var timeSeries []prompb.TimeSeries
+	var totalCount float64
+
+	for _, dp := range histogram.DataPoints {
+		ex := generateExamplers(dp.Exemplars)
+
+		// configure labels for each datapoint
+		maxDpLabels := generateDataPointLabels(metricName+histogramMaxSuffix, labels, dp.Attributes)
+		minDpLabels := generateDataPointLabels(metricName+histogramMinSuffix, labels, dp.Attributes)
+		sumDpLabels := generateDataPointLabels(metricName+histogramSumSuffix, labels, dp.Attributes)
+		countDpLabels := generateDataPointLabels(metricName+histogramCountSuffix, labels, dp.Attributes)
+		boundDpLabels := generateDataPointLabels(metricName, labels, dp.Attributes)
+
+		// add time series for each datapoint
+		if maxVal, defined := dp.Max.Value(); defined {
+			timeSeries = append(timeSeries, createTimeSeries(float64(maxVal), dp.Time, maxDpLabels, ex))
+		}
+		if minVal, defined := dp.Min.Value(); defined {
+			timeSeries = append(timeSeries, createTimeSeries(float64(minVal), dp.Time, minDpLabels, ex))
+		}
+		timeSeries = append(timeSeries, createTimeSeries(float64(dp.Sum), dp.Time, sumDpLabels, ex))
+		timeSeries = append(timeSeries, createTimeSeries(float64(dp.Count), dp.Time, countDpLabels, ex))
+
+		// Handle histogram buckets
+		for i, bucketCount := range dp.BucketCounts {
+			boundDpLabels["le"] = fmt.Sprintf("%g", dp.Bounds[i])
+			totalCount += float64(dp.BucketCounts[i])
+
+			// Create timeseries for the bucket
+			timeSeries = append(timeSeries, createTimeSeries(float64(bucketCount), dp.Time, boundDpLabels, ex))
+		}
+		boundDpLabels["le"] = histogramLastBucketSuffix
+		timeSeries = append(timeSeries, createTimeSeries(totalCount, dp.Time, boundDpLabels, ex))
+	}
+
+	return timeSeries, nil
+}
+
+// generateGlobalLabels returns global labels to add to all metrics based on the resource and the exporter settings
+func generateGlobalLabels(res *resource.Resource, exporterLabels map[string]string) map[string]string {
+	globalLabels := map[string]string{}
+
+	for _, attr := range res.Attributes() {
+		globalLabels[string(attr.Key)] = attr.Value.Emit()
+	}
+	maps.Copy(globalLabels, exporterLabels)
+	return globalLabels
+}
+
+// generateScopeLabels returns labels to add to a metric based on the scope and its attributes
+func generateScopeLabels(scope instrumentation.Scope) map[string]string {
+	scopeLabels := map[string]string{
+		"otel_scope_name":    scope.Name,
+		"otel_scope_version": scope.Version,
+	}
+	maps.Copy(scopeLabels, generateAttributesLabels(scope.Attributes))
+	return scopeLabels
+}
+
+// generateAttributesLabels returns a map of labels from a set of attributes
+func generateAttributesLabels(as attribute.Set) map[string]string {
+	labels := map[string]string{}
+
+	for _, attr := range as.ToSlice() {
+		labels[string(attr.Key)] = attr.Value.Emit()
+	}
+	return labels
+}
+
+// addMetricName adds the metric name as attribute to the timeseries as Logz.io requires it.
+func addMetricName(metricName string, labels map[string]string) map[string]string {
+	result := map[string]string{}
+	maps.Copy(result, labels)
+	result["__name__"] = metricName
+	return result
+}
+
+// generateExamplers returns a slice of prompb.Exemplar from a slice of metricdata.Exemplar
+func generateExamplers[N int64 | float64](exemplars []metricdata.Exemplar[N]) []prompb.Exemplar {
+	labels := map[string]string{}
+	result := make([]prompb.Exemplar, 0, len(exemplars))
+	for i, ex := range exemplars {
+		labels[traceIdLabelName] = hex.EncodeToString(ex.TraceID[:])
+		labels[spanIdLabelName] = hex.EncodeToString(ex.SpanID[:])
+
+		for _, attr := range ex.FilteredAttributes {
+			labels[string(attr.Key)] = attr.Value.Emit()
+		}
+
+		result[i] = prompb.Exemplar{
+			Value:     float64(ex.Value),
+			Timestamp: ex.Time.UnixNano() / int64(time.Millisecond),
+			Labels:    createLabelSet(labels),
+		}
+	}
+	return result
+}
+
+// generateDataPointLabels returns a map of labels for a datapoint based on the metric name, labels, and attributes
+func generateDataPointLabels(metricName string, labels map[string]string, attributes attribute.Set) map[string]string {
+	result := addMetricName(metricName, labels)
+	maps.Copy(result, generateAttributesLabels(attributes))
+	return result
+}
+
 // createLabelSet combines attributes from a Record, resource, and extra attributes to create a
 // slice of prompb.Label.
-func createLabelSet(edata exportData, extraAttributes ...attribute.KeyValue) []prompb.Label {
-	// Map ensure no duplicate label names.
-	labelMap := map[string]prompb.Label{}
+func createLabelSet(labels map[string]string) []prompb.Label {
+	res := make([]prompb.Label, 0, len(labels))
 
-	// mergeAttributes merges Record and Resource attributes into a single set, giving precedence
-	// to the record's attributes.
-	mi := attribute.NewMergeIterator(edata.Labels(), edata.Resource.Set())
-	for mi.Next() {
-		attribute := mi.Label()
-		key := string(attribute.Key)
-		labelMap[key] = prompb.Label{
-			Name:  sanitize(key),
-			Value: attribute.Value.Emit(),
-		}
-	}
-
-	// Add extra attributes created by the exporter like the metric name or attributes to
-	// represent histogram buckets.
-	for _, attribute := range extraAttributes {
-		// Ensure attribute doesn't exist. If it does, notify user that a user created attribute
-		// is being overwritten by a Prometheus reserved label (e.g. 'le' for histograms)
-		key := string(attribute.Key)
-		value := attribute.Value.AsString()
-		_, found := labelMap[key]
-		if found {
-			log.Printf("Attribute %s is overwritten. Check if Prometheus reserved labels are used.\n", key)
-		}
-		labelMap[key] = prompb.Label{
-			Name:  key,
-			Value: value,
-		}
-	}
-
-	// Create slice of labels from labelMap and return
-	res := make([]prompb.Label, 0, len(labelMap))
-	for _, lb := range labelMap {
-		res = append(res, lb)
+	for l := range labels {
+		res = append(res, prompb.Label{
+			Name:  sanitize(l),
+			Value: labels[l],
+		})
 	}
 
 	return res
@@ -337,6 +347,7 @@ func (e *Exporter) addHeaders(req *http.Request) error {
 	req.Header.Add("X-Prometheus-Remote-Write-Version", "0.1.0")
 	req.Header.Add("Content-Encoding", "snappy")
 	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("User-Agent", "logzio-go-sdk-metrics")
 
 	// Add Authorization header
 	bearerTokenString := "Bearer " + e.config.LogzioMetricsToken
