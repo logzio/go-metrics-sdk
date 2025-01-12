@@ -29,8 +29,6 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheusremotewrite"
 )
 
 // ValidConfig is a Config struct that should cause no errors.
@@ -40,11 +38,9 @@ var validConfig = Config{
 	RemoteTimeout:         30 * time.Second,
 	PushInterval:          10 * time.Second,
 	Quantiles:             []float64{0, 0.25, 0.5, 0.75, 1},
-	ExporterSettings: prometheusremotewrite.Settings{
-		AddMetricSuffixes: true,
-		ExternalLabels: map[string]string{
-			"label": "value",
-		},
+	AddMetricSuffixes:     true,
+	ExternalLabels: map[string]string{
+		"label": "value",
 	},
 	client: http.DefaultClient,
 }

@@ -41,14 +41,15 @@ Example:
 
 ```go
 import (
+    "context"
     metricsExporter "github.com/logzio/go-metrics-sdk"
-    "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheusremotewrite"
     "go.opentelemetry.io/otel"
     "go.opentelemetry.io/otel/attribute"
     m "go.opentelemetry.io/otel/metric"
     "go.opentelemetry.io/otel/sdk/metric"
     "go.opentelemetry.io/otel/sdk/resource"
     semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+    "log"
     "time"
 )
 
@@ -60,11 +61,9 @@ func newLogzioExporter() (*metricsExporter.Exporter, error) {
             RemoteTimeout:         30 * time.Second,
             PushInterval:          10 * time.Second,
             Quantiles:             []float64{0, 0.25, 0.5, 0.75, 1},
-            ExporterSettings: prometheusremotewrite.Settings{
-                AddMetricSuffixes: true,
-                ExternalLabels: map[string]string{
-                    "<<LABEL_KEY>>": "<<LABEL_VALUE>>",
-                },
+            AddMetricSuffixes: true,
+            ExternalLabels: map[string]string{
+                "<<LABEL_KEY>>": "<<LABEL_VALUE>>",
             },
         })
 }
@@ -85,20 +84,21 @@ type Config struct {
 	PushInterval          time.Duration
 	Quantiles             []float64
 	HistogramBoundaries   []float64
-    ExporterSettings      prometheusremotewrite.Settings
+    ExternalLabels        map[string]string
+    AddMetricSuffixes     bool
 }
 ```
 
-| Parameter Name        | Description                                                                                                                                                                                                                          | Required/Optional | Default                       |
-|-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------|-------------------------------|
-| LogzioMetricsListener | The Logz.io metrics Listener URL for your region with port 8053.                                                                                                                                                                     | Required          | https://listener.logz.io:8053 |
-| LogzioMetricsToken    | The Logz.io metrics shipping token securely directs the data to your Logz.io account.                                                                                                                                                | Required          | -                             |
-| RemoteTimeout         | The timeout for requests to the remote write Logz.io metrics listener endpoint.                                                                                                                                                      | Required          | 30 (seconds)                  |
-| PushInterval          | The time interval for sending the metrics to Logz.io.                                                                                                                                                                                | Required          | 10 (seconds)                  |
-| Quantiles             | The quantiles of the histograms.                                                                                                                                                                                                     | Optional          | [0.5, 0.9, 0.95, 0.99]        |
-| HistogramBoundaries   | The histogram boundaries.                                                                                                                                                                                                            | Optional          | -                             |
-| ExporterSettings      | Allow adding global labels to all metrics that are processed by the exporter, and add unit suffix. [ref](https://pkg.go.dev/github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheusremotewrite#Settings) | Optional          | -                             |
-
+| Parameter Name        | Description                                                                           | Required/Optional | Default                       |
+|-----------------------|---------------------------------------------------------------------------------------|-------------------|-------------------------------|
+| LogzioMetricsListener | The Logz.io metrics Listener URL for your region with port 8053.                      | Required          | https://listener.logz.io:8053 |
+| LogzioMetricsToken    | The Logz.io metrics shipping token securely directs the data to your Logz.io account. | Required          | -                             |
+| RemoteTimeout         | The timeout for requests to the remote write Logz.io metrics listener endpoint.       | Required          | 30 (seconds)                  |
+| PushInterval          | The time interval for sending the metrics to Logz.io.                                 | Required          | 10 (seconds)                  |
+| Quantiles             | The quantiles of the histograms.                                                      | Optional          | [0.5, 0.9, 0.95, 0.99]        |
+| HistogramBoundaries   | The histogram boundaries.                                                             | Optional          | -                             |
+| ExternalLabels        | Allow adding global labels to all metrics that are processed by the exporter.         | Optional          | -                             |
+| AddMetricSuffixes     | Adds Unit suffix to the metric, if the Unit was defined.                              | Optional          | `false`                       |
 
 ## Setting up the Metric Instruments Creator
 
@@ -345,7 +345,6 @@ package testtt
 import (
 	"context"
 	metricsExporter "github.com/logzio/go-metrics-sdk"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheusremotewrite"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	m "go.opentelemetry.io/otel/metric"
@@ -353,7 +352,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"log"
-	"testing"
 	"time"
 )
 
@@ -365,12 +363,10 @@ func newLogzioExporter() (*metricsExporter.Exporter, error) {
 			RemoteTimeout:         30 * time.Second,
 			PushInterval:          10 * time.Second,
 			Quantiles:             []float64{0, 0.25, 0.5, 0.75, 1},
-			ExporterSettings: prometheusremotewrite.Settings{
-				AddMetricSuffixes: true,
-				ExternalLabels: map[string]string{
-					"globalLabel": "value",
-				},
-			},
+            AddMetricSuffixes: true,
+            ExternalLabels: map[string]string{
+              "<<LABEL_KEY>>": "<<LABEL_VALUE>>",
+            },
 		})
 }
 

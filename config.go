@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"net/http"
 	"time"
-
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheusremotewrite"
 )
 
 var (
@@ -38,7 +36,8 @@ type Config struct {
 	PushInterval          time.Duration
 	Quantiles             []float64
 	HistogramBoundaries   []float64
-	ExporterSettings      prometheusremotewrite.Settings
+	ExternalLabels        map[string]string
+	AddMetricSuffixes     bool
 	client                *http.Client
 }
 

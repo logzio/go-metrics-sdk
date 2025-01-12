@@ -24,7 +24,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"maps"
 	"sync"
-	
+
 	"go.opentelemetry.io/otel/sdk/instrumentation"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -104,7 +104,7 @@ func (e *Exporter) ConvertToTimeSeries(rm *metricdata.ResourceMetrics) ([]prompb
 	var timeSeries []prompb.TimeSeries
 	var result *multierror.Error
 
-	labelsMap := generateGlobalLabels(rm.Resource, e.config.ExporterSettings.ExternalLabels)
+	labelsMap := generateGlobalLabels(rm.Resource, e.config.ExternalLabels)
 
 	// Iterate over each record in the checkpoint set and convert to TimeSeries
 	for _, sm := range rm.ScopeMetrics {
@@ -112,7 +112,7 @@ func (e *Exporter) ConvertToTimeSeries(rm *metricdata.ResourceMetrics) ([]prompb
 
 		for _, m := range sm.Metrics {
 			metricName := m.Name
-			if e.config.ExporterSettings.AddMetricSuffixes && m.Unit != "" {
+			if e.config.AddMetricSuffixes && m.Unit != "" {
 				metricName = metricName + "_" + m.Unit
 			}
 
