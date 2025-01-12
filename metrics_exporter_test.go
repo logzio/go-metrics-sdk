@@ -31,12 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheusremotewrite"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 )
-
-var testResource = resource.NewWithAttributes(semconv.SchemaURL, attribute.String("R", "V"))
 
 // ValidConfig is a Config struct that should cause no errors.
 var validConfig = Config{
@@ -176,7 +171,7 @@ func TestNew(t *testing.T) {
 // TestBuildMessage tests whether BuildMessage successfully returns a Snappy-compressed
 // protobuf message.
 func TestBuildMessage(t *testing.T) {
-	exporter := Exporter{validConfig}
+	exporter := Exporter{config: validConfig}
 	timeseries := []prompb.TimeSeries{}
 
 	// buildMessage returns the error that proto.Marshal() returns. Since the proto
@@ -191,7 +186,7 @@ func TestBuildMessage(t *testing.T) {
 func TestBuildRequest(t *testing.T) {
 	// Make fake exporter and message for testing.
 	var testMessage = []byte(`Test Message`)
-	exporter := Exporter{validConfig}
+	exporter := Exporter{config: validConfig}
 
 	// Create the http request.
 	req, err := exporter.buildRequest(testMessage)
@@ -307,7 +302,7 @@ func TestSendRequest(t *testing.T) {
 			// Set up an Exporter that uses the test server's endpoint and attaches the
 			// test's isStatusNotFound header.
 			test.config.LogzioMetricsListener = server.URL
-			exporter := Exporter{*test.config}
+			exporter := Exporter{config: *test.config}
 
 			// Create a test TimeSeries struct.
 			timeSeries := []prompb.TimeSeries{

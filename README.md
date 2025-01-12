@@ -18,7 +18,6 @@ for more details on the Remote Write API.
 
 * [Installation](#installation)
 * [Configuring the Exporter](#configuring-the-exporter)
-* [Setting up the Exporter](#setting-up-the-exporter)
 * [Setting up the Metric Instruments Registry](#setting-up-the-metric-instruments-registry)
 * [Metric Instrument to Aggregation Mapping](#metric-instrument-to-aggregation-mapping)
 * [Metric Instrumentation and Recording Values](#metric-instrumentation-and-recording-values)
@@ -35,29 +34,48 @@ go get github.com/logzio/go-metrics-sdk
 ## Configuring the Exporter
 
 The Exporter requires certain information, such as the Logz.io metrics listener URL, Logz.io metrics token and push interval
-duration, to function properly. This information is stored in a `Config` struct, which is
+duration, to function properly.  This information is stored in a `Config` struct, which is
 passed into the Exporter during the setup pipeline.
 
-Replace `<<LOGZIO_METRICS_LISTENER>>` with your Logz.io metrics listener URL.
-Replace `<<LOGZIO_METRICS_TOKEN>>` with your Logz.io metrics token.
+Example:
 
 ```go
 import (
     metricsExporter "github.com/logzio/go-metrics-sdk"
-    controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-    semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
-    // ...
+    "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheusremotewrite"
+    "go.opentelemetry.io/otel"
+    "go.opentelemetry.io/otel/attribute"
+    m "go.opentelemetry.io/otel/metric"
+    "go.opentelemetry.io/otel/sdk/metric"
+    "go.opentelemetry.io/otel/sdk/resource"
+    semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+    "time"
 )
 
-config := metricsExporter.Config {
-	LogzioMetricsListener: "<<LOGZIO_METRICS_LISTENER>>",
-	LogzioMetricsToken:    "<<LOGZIO_METRICS_TOKEN>>",
-	RemoteTimeout:         30 * time.Second,
-	PushInterval:          5 * time.Second,
+func newLogzioExporter() (*metricsExporter.Exporter, error) {
+    return metricsExporter.New(
+        metricsExporter.Config{
+            LogzioMetricsListener: "https://<<LOGZIO_METRICS_LISTENER>>:8053",
+            LogzioMetricsToken:    "<<LOGZIO_METRICS_TOKEN>>",
+            RemoteTimeout:         30 * time.Second,
+            PushInterval:          10 * time.Second,
+            Quantiles:             []float64{0, 0.25, 0.5, 0.75, 1},
+            ExporterSettings: prometheusremotewrite.Settings{
+                AddMetricSuffixes: true,
+                ExternalLabels: map[string]string{
+                    "<<LABEL_KEY>>": "<<LABEL_VALUE>>",
+                },
+            },
+        })
 }
 ```
 
-Here is the `Config` struct definition.
+- Replace `<<LOGZIO_METRICS_LISTENER>>` with your Logz.io metrics listener URL.
+- Replace `<<LOGZIO_METRICS_TOKEN>>` with your Logz.io metrics token.
+- Replace `<<LABEL_KEY>>` and `<<LABEL_VALUE>>` with a label you want to apply to all metrics. You can add more labels if needed or remove the ExporterSettings section entirely if you don't want to add any global labels.
+
+
+### Config Struct all options
 
 ```go
 type Config struct {
@@ -67,80 +85,93 @@ type Config struct {
 	PushInterval          time.Duration
 	Quantiles             []float64
 	HistogramBoundaries   []float64
+    ExporterSettings      prometheusremotewrite.Settings
 }
 ```
 
-| Parameter Name | Description | Required/Optional | Default |
-| --- | --- | --- | --- |
-| LogzioMetricsListener | The Logz.io metrics Listener URL for your region with port 8053. | Required | https://listener.logz.io:8053 |
-| LogzioMetricsToken | The Logz.io metrics shipping token securely directs the data to your Logz.io account. | Required | - |
-| RemoteTimeout | The timeout for requests to the remote write Logz.io metrics listener endpoint. | Required | 30 (seconds) |
-| PushInterval | The time interval for sending the metrics to Logz.io. | Required | 10 (seconds) |
-| Quantiles | The quantiles of the histograms. | Optional | [0.5, 0.9, 0.95, 0.99] |
-| HistogramBoundaries | The histogram boundaries. | Optional | - |
+| Parameter Name        | Description                                                                                                                                                                                                                          | Required/Optional | Default                       |
+|-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------|-------------------------------|
+| LogzioMetricsListener | The Logz.io metrics Listener URL for your region with port 8053.                                                                                                                                                                     | Required          | https://listener.logz.io:8053 |
+| LogzioMetricsToken    | The Logz.io metrics shipping token securely directs the data to your Logz.io account.                                                                                                                                                | Required          | -                             |
+| RemoteTimeout         | The timeout for requests to the remote write Logz.io metrics listener endpoint.                                                                                                                                                      | Required          | 30 (seconds)                  |
+| PushInterval          | The time interval for sending the metrics to Logz.io.                                                                                                                                                                                | Required          | 10 (seconds)                  |
+| Quantiles             | The quantiles of the histograms.                                                                                                                                                                                                     | Optional          | [0.5, 0.9, 0.95, 0.99]        |
+| HistogramBoundaries   | The histogram boundaries.                                                                                                                                                                                                            | Optional          | -                             |
+| ExporterSettings      | Allow adding global labels to all metrics that are processed by the exporter, and add unit suffix. [ref](https://pkg.go.dev/github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheusremotewrite#Settings) | Optional          | -                             |
 
-
-## Setting up the Exporter
-
-Call the `InstallNewPipeline` function to set up the exporter. It
-requires a `Config` struct and returns a push Controller and error. If the error is nil,
-the setup is successful and the user can begin creating instruments. No other action is
-needed.
-
-* Replace `<<COLLECT_PERIOD>>` with the collect period time (seconds).
-* You can use `attribute.<<TYPE>>("<<LABEL_KEY>>", "<<LABEL_VALUE>>")` to add labels to all metric instruments. 
-  You can add more than one `attribute` (make sure to replace `<<LABEL_KEY>>` and `<<LABEL_VALUE>>` 
-  with you label's key and value accordingly, and `<<TYPE>>` with the available types according to the 
-  `<<LABEL_VALUE>>` type you are using).
-
-```go
-// Use the `config` instance from last step.
-
-cont, err := metricsExporter.InstallNewPipeline(
-    config,
-    controller.WithCollectPeriod(<<COLLECT_PERIOD>>*time.Second),
-    controller.WithResource(
-        resource.NewWithAttributes(
-            semconv.SchemaURL,
-            attribute.<<TYPE>>("<<LABEL_KEY>>", "<<LABEL_VALUE>>"),
-        ),
-    ),
-)
-if err != nil {
-    return err
-}
-```
 
 ## Setting up the Metric Instruments Creator
 
 Create `Meter` to be able to create metric instruments.
 
-Replace `<<INSTRUMENTATION_NAME>>` with your instrumentation name.
-
 ```go
-// Use `cont` instance from last step.
+func newResource() (*resource.Resource, error) {
+    return resource.Merge(resource.Default(),
+        resource.NewWithAttributes(semconv.SchemaURL,
+            semconv.ServiceName("<<SERVICE_NAME>>"),
+            semconv.ServiceVersion("<<SERVICE_VERSION>>"),
+        ))
+}
 
-ctx := context.Background()
+func newMeterProvider(res *resource.Resource) (*metric.MeterProvider, error) {
+    metricExporter, err := newLogzioExporter()
+	if err != nil {
+        return nil, err
+    }
+
+    meterProvider := metric.NewMeterProvider(
+        metric.WithResource(res),
+        metric.WithReader(metric.NewPeriodicReader(metricExporter,
+        metric.WithInterval(60*time.Second))),
+    )
+    return meterProvider, nil
+}
+
+// create a context
+con := context.Background()
+
+// Create resource
+res, err := newResource()
+if err != nil {
+    panic(err)
+}
+
+// Create a meter provider.
+meterProvider, err := newMeterProvider(res)
+if err != nil {
+	panic(err)
+}
+
+// Handle shutdown properly so nothing leaks.
 defer func() {
-    handleErr(cont.Stop(ctx))
+    if err := meterProvider.Shutdown(con); err != nil {
+        log.Println(err)
+    }
 }()
 
-meter := cont.Meter("<<INSTRUMENTATION_NAME>>")
+// Register as global meter provider so that it can be used via otel.Meter
+// and accessed using otel.GetMeterProvider.
+// Most instrumentation libraries use the global meter provider as default.
+// If the global meter provider is not set then a no-op implementation
+// is used, which fails to generate data.
+otel.SetMeterProvider(meterProvider)
+
+meter := otel.Meter("example-meter")  // replace `example-meter` with any custom instrumentation meter name you'd like
 ```
 
 ## Metric Instrument to Aggregation Mapping
 
-The exporter uses the `simple` selector's `NewWithHistogramDistribution()`. This means
+The exporter uses the `simple` selector's `metric.DefaultAggregationSelector()`. This means
 that instruments are mapped to aggregations as shown in the table below.
 
-| Instrument | Behavior | Aggregation |
-| --- | --- | --- |
-| Counter | a synchronous Instrument which supports non-negative increments. | Sum |
-| Asynchronous Counter | an asynchronous Instrument which reports monotonically increasing value(s) when the instrument is being observed. | Sum |
-| Histogram | a synchronous Instrument which can be used to report arbitrary values that are likely to be statistically meaningful. It is intended for statistics such as histograms, summaries, and percentile. | Histogram |
-| Asynchronous Gauge | an asynchronous Instrument which reports non-additive value(s) when the instrument is being observed. | LastValue |
-| UpDownCounter | a synchronous Instrument which supports increments and decrements. | Sum |
-| Asynchronous UpDownCounter | an asynchronous Instrument which reports additive value(s) when the instrument is being observed. | Sum |
+| Instrument                 | Behavior                                                                                                                                                                                           | Aggregation |
+|----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------|
+| Counter                    | a synchronous Instrument which supports non-negative increments.                                                                                                                                   | Sum         |
+| Asynchronous Counter       | an asynchronous Instrument which reports monotonically increasing value(s) when the instrument is being observed.                                                                                  | Sum         |
+| Histogram                  | a synchronous Instrument which can be used to report arbitrary values that are likely to be statistically meaningful. It is intended for statistics such as histograms, summaries, and percentile. | Histogram   |
+| Asynchronous Gauge         | an asynchronous Instrument which reports non-additive value(s) when the instrument is being observed.                                                                                              | Gauge       |
+| UpDownCounter              | a synchronous Instrument which supports increments and decrements.                                                                                                                                 | Sum         |
+| Asynchronous UpDownCounter | an asynchronous Instrument which reports additive value(s) when the instrument is being observed.                                                                                                  | Sum         |
 
 For more information, see the OpenTelemetry [documentation](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/api.md).
 
@@ -152,138 +183,127 @@ For more information, see the OpenTelemetry [documentation](https://github.com/o
 ### Counter
 
 ```go
-// Use `ctx` and `meter` from last steps.
-
 // Create counter instruments
-intCounter := metric.Must(meter).NewInt64Counter(
-    "go_metrics.int_counter",
-    metric.WithDescription("int_counter description"),
+counter, err := meter.Int64Counter(
+    "int_counter",  // name of the metric
+    // m.WithUnit("ms")  // add unit to the metric if you want
+    m.WithDescription("Counts the total number of requests"),
 )
-floatCounter := metric.Must(meter).NewFloat64Counter(
-    "go_metrics.float_counter",
-    metric.WithDescription("float_counter description"),
-)
+
+floatCounter, err := meter.Float64Counter("float_counter")  // name of the metric
 
 // Record values to the metric instruments and add labels
-intCounter.Add(ctx, int64(10), attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>>"))
-floatCounter.Add(ctx, float64(2.5), attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>>"))
+counter.Add(con, 1)
+counter.Add(con, 10, m.WithAttributes(attribute.Key("<<LABEL_KEY>>").String("<<LABEL_VALUE>>")))
+floatCounter.Add(con, 2.5)
 ```
 
 ### Asynchronous Counter
 
 ```go
-// Use `meter` from last steps.
-
-// Create callbacks for your CounterObserver instruments
-intCounterObserverCallback := func(_ context.Context, result metric.Int64ObserverResult) {
-    result.Observe(10, attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>>"))
-}
-floatCounterObserverCallback := func(_ context.Context, result metric.Float64ObserverResult) {
-    result.Observe(2.5, attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>>"))
-}
-
-// Create CounterObserver instruments
-_ = metric.Must(meter).NewInt64CounterObserver(
-    "go_metrics.int_counter_observer",
-    intCounterObserverCallback,
-    metric.WithDescription("int_counter_observer description"),
+// Create callbacks for your observable counter instruments
+// Float64ObservableCounter is also a supported type
+	observableCounter, err := meter.Int64ObservableCounter(
+        "observable_counter",  // name of the metric
+        // m.WithUnit("By"),  // add unit to the metric if you want
+        m.WithDescription("observable counter description"),
 )
-_ = metric.Must(meter).NewFloat64CounterObserver(
-    "go_metrics.float_counter_observer",
-    floatCounterObserverCallback,
-    metric.WithDescription("float_counter_observer description"),
+
+_, err = meter.RegisterCallback(
+    func(con context.Context, o m.Observer) error {
+        o.ObserveInt64(observableCounter, 10, m.WithAttributes(attribute.Key("<<LABEL_KEY>>").String("<<LABEL_VALUE>>")))
+        return nil
+    },
+    observableCounter,
 )
 ```
 
 ### Histogram
 
 ```go
-// Use `ctx` and `meter` from last steps.
-
 // Create Histogram instruments
-intHistogram := metric.Must(meter).NewInt64Histogram(
-    "go_metrics.int_histogram",
-    metric.WithDescription("int_histogram description"),
+intHistogram, err := meter.Int64Histogram(
+	"histogram-meter",  // name of the metric
+    // m.WithUnit("seconds")  // add unit to the metric if you want
+    m.WithDescription("Histogram description"),
 )
-floatHistogram := metric.Must(meter).NewFloat64Histogram(
-    "go_metrics.float_histogram",
-    metric.WithDescription("float_histogram description"),
-)
+
+floatHistogram, err := meter.Float64Histogram("float-histogram-meter")  // name of the metric
 
 // Record values to the metric instruments and add labels
-intHistogram.Record(ctx, int(10), attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>"))
-floatHistogram.Record(ctx, float64(2.5), attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>"))
+intHistogram.Record(con, 2)
+intHistogram.Record(con, 2, m.WithAttributes(attribute.Key("<<LABEL_KEY>>").String("<<LABEL_VALUE>>")))
+floatHistogram.Record(con, 3.4)
+```
+
+### Gauge
+
+```go
+g, err := meter.Int64Gauge(
+	"g-test",
+	// m.WithUnit("seconds"),  // add unit to the metric if you want
+    m.WithDescription("Gauge description"),
+)
+
+g.Record(con, 4)
+g.Record(con, 4, m.WithAttributes(attribute.Key("<<LABEL_KEY>>").String("<<LABEL_VALUE>>")))
 ```
 
 ### Asynchronous Gauge
 
 ```go
-// Use `meter` from last steps.
-
-// Create callbacks for your GaugeObserver instruments
-intGaugeObserverCallback := func(_ context.Context, result metric.Int64ObserverResult) {
-    result.Observe(10, attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>>"))
-}
-floatGaugeObserverCallback := func(_ context.Context, result metric.Float64ObserverResult) {
-result.Observe(2.5, attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>>"))
-}
-
-// Create GaugeObserver instruments
-_ = metric.Must(meter).NewInt64GaugeObserver(
-    "go_metrics.int_gauge_observer", 
-    intGaugeObserverCallback,
-    metric.WithDescription("int_gauge_observer description"),
+// Create callbacks for your observable up-down counter instruments
+// Float64ObservableGauge is also a supported type
+observableGauge, err := meter.Int64ObservableGauge(
+    "observable_gauge",  // name of the metric
+    // m.WithUnit("By"),  // add unit to the metric if you want
+    m.WithDescription("observable gauge description"),
 )
-_ = metric.Must(meter).NewFloat64GaugeObserver(
-    "go_metrics.float_gauge_observer",
-    floatGaugeObserverCallback,
-    metric.WithDescription("float_gauge_observer description"),
+
+_, err = meter.RegisterCallback(
+    func(con context.Context, o m.Observer) error {
+        o.ObserveInt64(observableGauge, 10, m.WithAttributes(attribute.Key("<<LABEL_KEY>>").String("<<LABEL_VALUE>>")))
+        return nil
+    },
+observableGauge,
 )
 ```
 
 ### UpDownCounter
 
 ```go
-// Use `ctx` and `meter` from last steps.
-
-// Create UpDownCounter instruments
-intUpDownCounter := metric.Must(meter).NewInt64UpDownCounter(
-    "go_metrics.int_up_down_counter",
-    metric.WithDescription("int_up_down_counter description"),
-)
-floatUpDownCounter := metric.Must(meter).NewFloat64UpDownCounter(
-    "go_metrics.float_up_down_counter",
-    metric.WithDescription("float_up_down_counter description"),
+intUpDownCounter, err := meter.Int64UpDownCounter(
+    "int_up_down_counter",  // name of the metric
+    // m.WithUnit("ms"),  // add unit to the metric if you want
+    m.WithDescription("Up-down counter description"),
 )
 
-// Record values to the metric instruments and add labels
-intUpDownCounter.Add(ctx, int64(-10), attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>"))
-floatUpDownCounter.Add(ctx, float64(2.5), attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>"))
+floatUpDownCounter, err := meter.Float64UpDownCounter(
+    "float_up_down_counter",  // name of the metric
+    m.WithDescription("Up-down counter description"),
+)
+
+intUpDownCounter.Add(con, 5)
+floatUpDownCounter.Add(con, 5.6, m.WithAttributes(attribute.Key("<<LABEL_KEY>>").String("<<LABEL_VALUE>>")))
 ```
 
 ### Asynchronous UpDownCounter
 
 ```go
-// Use `meter` from last steps.
-
-// Create callback for your UpDownCounterObserver instruments
-intUpDownCounterObserverCallback := func(_ context.Context, result metric.Int64ObserverResult) {
-    result.Observe(-10, attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>"))
-}
-floatUpDownCounterObserverCallback := func(_ context.Context, result metric.Float64ObserverResult) {
-    result.Observe(2.5, attribute.String("<<LABEL_KEY>>", "<<LABEL_VALUE>"))
-}
-
-// Create UpDownCounterObserver instruments
-_ = metric.Must(meter).NewInt64UpDownCounterObserver(
-    "go_metrics.int_up_down_counter_observer",
-    intUpDownCounterObserverCallback,
-    metric.WithDescription("int_up_down_counter_observer description"),
+// Create callbacks for your observable up-down counter instruments
+// Float64ObservableUpDownCounter is also a supported type
+observableCounter, err := meter.Int64ObservableUpDownCounter(
+    "observable_up_down_counter",  // name of the metric
+    // m.WithUnit("By"),  // add unit to the metric if you want
+    m.WithDescription("observable up down counter description"),
 )
-_ = metric.Must(meter).NewFloat64UpDownCounterObserver(
-    "go_metrics.float_up_down_counter_observer",
-    floatUpDownCounterObserverCallback,
-    metric.WithDescription("float_up_down_counter_observer description"),
+
+_, err = meter.RegisterCallback(
+    func(con context.Context, o m.Observer) error {
+        o.ObserveInt64(observableCounter, 10, m.WithAttributes(attribute.Key("<<LABEL_KEY>>").String("<<LABEL_VALUE>>")))
+        return nil
+    },
+    observableCounter,
 )
 ```
 
@@ -320,91 +340,93 @@ The end result is the same since the aggregations are cumulative.
 ## Full Example
 
 ```go
-package main
+package testtt
 
 import (
-    "context"
-    "fmt"
-    "math/rand"
-    "time"
-
-    metricsExporter "github.com/logzio/go-metrics-sdk"
-    "go.opentelemetry.io/otel/attribute"
-    "go.opentelemetry.io/otel/metric"
-    controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-    "go.opentelemetry.io/otel/sdk/resource"
-    semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+	"context"
+	metricsExporter "github.com/logzio/go-metrics-sdk"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheusremotewrite"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	m "go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"log"
+	"testing"
+	"time"
 )
 
-func main() {
-    // Create Config struct.
-    config := metricsExporter.Config{
-        LogzioMetricsListener: "<<LOGZIO_METRICS_LISTENER>>",
-        LogzioMetricsToken:    "<<LOGZIO_METRICS_TOKEN>>",
-        RemoteTimeout:         30 * time.Second,
-        PushInterval:          15 * time.Second,
-    }
-
-    // Create and install the exporter. Additionally, set the push interval to 5 seconds
-    // and add a resource to the controller.
-    cont, err := metricsExporter.InstallNewPipeline(
-        config,
-        controller.WithCollectPeriod(5*time.Second),
-        controller.WithResource(
-            resource.NewWithAttributes(
-                semconv.SchemaURL,
-                attribute.String("KEY", "VALUE"),
-            ),
-        ),
-    )
-    if err != nil {
-        panic(fmt.Errorf("error: %v", err))
-    }
-
-    ctx := context.Background()
-    defer func() {
-        handleErr(cont.Stop(ctx))
-    }()
-
-    fmt.Println("Success: Installed Exporter Pipeline")
-
-    // Create a counter and histogram
-    meter := cont.Meter("example")
-
-    // Create metric instruments
-    histogram := metric.Must(meter).NewInt64Histogram(
-        "example.histogram",
-        metric.WithDescription("Records values"),
-    )
-    counter := metric.Must(meter).NewInt64Counter(
-        "example.counter",
-        metric.WithDescription("Counts things"),
-    )
-
-    fmt.Println("Success: Created Int64Histogram and Int64Counter instruments!")
-
-    // Record random values to the metric instruments in a loop
-    fmt.Println("Starting to write data to the metric instruments!")
-
-    seed := rand.NewSource(time.Now().UnixNano())
-    random := rand.New(seed)
-
-    for {
-        time.Sleep(1 * time.Second)
-
-        randomValue := random.Intn(100)
-        value := int64(randomValue * 10)
-
-        histogram.Record(ctx, value, attribute.String("key", "value"))
-        counter.Add(ctx, int64(randomValue), attribute.String("key", "value"))
-
-        fmt.Printf("Adding %d to counter and recording %d in histogram\n", randomValue, value)
-    }
+func newLogzioExporter() (*metricsExporter.Exporter, error) {
+	return metricsExporter.New(
+		metricsExporter.Config{
+			LogzioMetricsListener: "https://listener.logz.io:8053",
+			LogzioMetricsToken:    "<<LOGZIO_METRICS_TOKEN>>",
+			RemoteTimeout:         30 * time.Second,
+			PushInterval:          10 * time.Second,
+			Quantiles:             []float64{0, 0.25, 0.5, 0.75, 1},
+			ExporterSettings: prometheusremotewrite.Settings{
+				AddMetricSuffixes: true,
+				ExternalLabels: map[string]string{
+					"globalLabel": "value",
+				},
+			},
+		})
 }
 
-func handleErr(err error) {
-    if err != nil {
-        panic(fmt.Errorf("encountered error: %v", err))
+func newResource() (*resource.Resource, error) {
+	return resource.Merge(resource.Default(),
+		resource.NewWithAttributes(semconv.SchemaURL,
+			semconv.ServiceName("my-service"),
+			semconv.ServiceVersion("0.1.0"),
+		))
+}
+
+func newMeterProvider(res *resource.Resource) (*metric.MeterProvider, error) {
+	metricExporter, err := newLogzioExporter()
+	if err != nil {
+		return nil, err
+	}
+
+	meterProvider := metric.NewMeterProvider(
+		metric.WithResource(res),
+		metric.WithReader(metric.NewPeriodicReader(metricExporter,
+            // Default is 1m. Set to 3s for demonstrative purposes.
+			metric.WithInterval(3*time.Second))),
+	)
+	return meterProvider, nil
+}
+
+func main() error {
+  con := context.Background()
+  res, err := newResource()
+  if err != nil {
+    panic(err)
+  }
+
+  meterProvider, err := newMeterProvider(res)
+  if err != nil {
+    panic(err)
+  }
+
+  defer func() {
+    if err := meterProvider.Shutdown(con); err != nil {
+      log.Println(err)
     }
+  }()
+
+  otel.SetMeterProvider(meterProvider)
+  meter := otel.Meter("example-meter")
+
+  counter, err := meter.Int64Counter(
+    "requests_total",
+    m.WithDescription("Counts the total number of requests"),
+  )
+  if err != nil {
+    return err
+  }
+  
+  counter.Add(con, 1)
+  counter.Add(con, 10, m.WithAttributes(attribute.Key("metricLabel").String("val")))
 }
 ```

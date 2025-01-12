@@ -23,7 +23,8 @@ import (
 	"fmt"
 	"github.com/hashicorp/go-multierror"
 	"maps"
-
+	"sync"
+	
 	"go.opentelemetry.io/otel/sdk/instrumentation"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -49,7 +50,9 @@ var (
 
 // Exporter forwards metrics to Logz.io
 type Exporter struct {
-	config Config
+	clientMu     sync.Mutex
+	config       Config
+	shutdownOnce sync.Once
 }
 
 // New returns a Logzio Prometheus remote write Exporter.
@@ -58,7 +61,7 @@ func New(config Config) (*Exporter, error) {
 		return nil, err
 	}
 
-	exporter := Exporter{config}
+	exporter := Exporter{config: config}
 	return &exporter, nil
 }
 
@@ -84,7 +87,9 @@ func (e *Exporter) Export(_ context.Context, rm *metricdata.ResourceMetrics) err
 		return buildRequestErr
 	}
 
+	e.clientMu.Lock()
 	sendRequestErr := e.sendRequest(request)
+	e.clientMu.Unlock()
 	if sendRequestErr != nil {
 		return sendRequestErr
 	}
@@ -107,7 +112,7 @@ func (e *Exporter) ConvertToTimeSeries(rm *metricdata.ResourceMetrics) ([]prompb
 
 		for _, m := range sm.Metrics {
 			metricName := m.Name
-			if e.config.ExporterSettings.AddMetricSuffixes {
+			if e.config.ExporterSettings.AddMetricSuffixes && m.Unit != "" {
 				metricName = metricName + "_" + m.Unit
 			}
 
@@ -339,6 +344,14 @@ func createLabelSet(labels map[string]string) []prompb.Label {
 	return res
 }
 
+// Aggregation returns the default Aggregation to use for an instrument kind.
+// Currently unused in this exporter, as it returns old sdk types. Therefore, in metric processing
+// we directly inspects the metric data type.
+// Retained for consistency with other OpenTelemetry exporters.
+func (e *Exporter) Aggregation(k metric.InstrumentKind) metric.Aggregation {
+	return metric.DefaultAggregationSelector(k)
+}
+
 // addHeaders adds required headers, an Authorization header, and all headers in the
 // Config Headers map to a http request.
 func (e *Exporter) addHeaders(req *http.Request) error {
@@ -418,4 +431,26 @@ func (e *Exporter) sendRequest(req *http.Request) error {
 		return fmt.Errorf("%v", res.Status)
 	}
 	return nil
+}
+
+// ForceFlush flushes any metric data held by an exporter.
+func (e *Exporter) ForceFlush(ctx context.Context) error {
+	// The exporter and client hold no state, nothing to flush.
+	return ctx.Err()
+}
+
+// Shutdown flushes all metric data held by an exporter and releases any held computational resources.
+func (e *Exporter) Shutdown(ctx context.Context) error {
+	err := fmt.Errorf("HTTP exporter is shutdown")
+	e.shutdownOnce.Do(func() {
+		err = e.ForceFlush(ctx)
+
+		if e.config.client != nil {
+			e.clientMu.Lock()
+			e.config.client.CloseIdleConnections()
+			e.config.client = nil
+			e.clientMu.Unlock()
+		}
+	})
+	return err
 }
