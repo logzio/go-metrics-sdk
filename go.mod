@@ -2,8 +2,6 @@ module github.com/logzio/go-metrics-sdk
 
 go 1.22.7
 
-toolchain go1.23.4
-
 require (
 	github.com/golang/snappy v0.0.4
 	github.com/google/go-cmp v0.6.0

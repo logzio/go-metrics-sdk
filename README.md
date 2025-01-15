@@ -34,7 +34,7 @@ go get github.com/logzio/go-metrics-sdk
 ## Configuring the Exporter
 
 The Exporter requires certain information, such as the Logz.io metrics listener URL, Logz.io metrics token and push interval
-duration, to function properly.  This information is stored in a `Config` struct, which is
+duration, to function properly. This information is stored in a `Config` struct, which is
 passed into the Exporter during the setup pipeline.
 
 Example:
@@ -71,7 +71,7 @@ func newLogzioExporter() (*metricsExporter.Exporter, error) {
 
 - Replace `<<LOGZIO_METRICS_LISTENER>>` with your Logz.io metrics listener URL.
 - Replace `<<LOGZIO_METRICS_TOKEN>>` with your Logz.io metrics token.
-- Replace `<<LABEL_KEY>>` and `<<LABEL_VALUE>>` with a label you want to apply to all metrics. You can add more labels if needed or remove the ExporterSettings section entirely if you don't want to add any global labels.
+- Replace `<<LABEL_KEY>>` and `<<LABEL_VALUE>>` with a label you want to apply to all metrics. You can add more labels if needed or remove the `ExternalLabels` section entirely if you don't want to add any global labels.
 
 
 ### Config Struct all options
@@ -84,8 +84,8 @@ type Config struct {
 	PushInterval          time.Duration
 	Quantiles             []float64
 	HistogramBoundaries   []float64
-    ExternalLabels        map[string]string
-    AddMetricSuffixes     bool
+	ExternalLabels        map[string]string
+	AddMetricSuffixes     bool
 }
 ```
 
