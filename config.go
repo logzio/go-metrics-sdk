@@ -36,8 +36,9 @@ type Config struct {
 	PushInterval          time.Duration
 	Quantiles             []float64
 	HistogramBoundaries   []float64
-
-	client *http.Client
+	ExternalLabels        map[string]string
+	AddMetricSuffixes     bool
+	client                *http.Client
 }
 
 // Validate checks a Config struct for missing required properties and property conflicts.
