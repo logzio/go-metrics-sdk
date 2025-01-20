@@ -340,7 +340,7 @@ The end result is the same since the aggregations are cumulative.
 ## Full Example
 
 ```go
-package testtt
+package main
 
 import (
 	"context"
@@ -363,7 +363,7 @@ func newLogzioExporter() (*metricsExporter.Exporter, error) {
 			RemoteTimeout:         30 * time.Second,
 			PushInterval:          10 * time.Second,
 			Quantiles:             []float64{0, 0.25, 0.5, 0.75, 1},
-            AddMetricSuffixes: true,
+            AddMetricSuffixes:     true,
             ExternalLabels: map[string]string{
               "<<LABEL_KEY>>": "<<LABEL_VALUE>>",
             },
@@ -394,35 +394,35 @@ func newMeterProvider(res *resource.Resource) (*metric.MeterProvider, error) {
 }
 
 func main() error {
-  con := context.Background()
-  res, err := newResource()
-  if err != nil {
-    panic(err)
-  }
-
-  meterProvider, err := newMeterProvider(res)
-  if err != nil {
-    panic(err)
-  }
-
-  defer func() {
-    if err := meterProvider.Shutdown(con); err != nil {
-      log.Println(err)
-    }
-  }()
-
-  otel.SetMeterProvider(meterProvider)
-  meter := otel.Meter("example-meter")
-
-  counter, err := meter.Int64Counter(
-    "requests_total",
-    m.WithDescription("Counts the total number of requests"),
-  )
-  if err != nil {
-    return err
-  }
-  
-  counter.Add(con, 1)
-  counter.Add(con, 10, m.WithAttributes(attribute.Key("metricLabel").String("val")))
+	con := context.Background()
+	res, err := newResource()
+	if err != nil {
+		panic(err)
+	}
+	
+	meterProvider, err := newMeterProvider(res)
+	if err != nil {
+		panic(err)
+	}
+	
+	defer func() {
+		if err := meterProvider.Shutdown(con); err != nil {
+			log.Println(err)
+		}
+	}()
+	
+	otel.SetMeterProvider(meterProvider)
+	meter := otel.Meter("example-meter")
+	
+	counter, err := meter.Int64Counter(
+		"requests_total", 
+		m.WithDescription("Counts the total number of requests"), 
+	)
+	if err != nil {
+		panic(err)
+	}
+	
+	counter.Add(con, 1)
+	counter.Add(con, 10, m.WithAttributes(attribute.Key("metricLabel").String("val")))
 }
 ```
