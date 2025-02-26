@@ -28,7 +28,7 @@ for more details on the Remote Write API.
 ## Installation
 
 ```bash
-go get github.com/logzio/go-metrics-sdk
+go get github.com/logzio/go-metrics-sdk/v2
 ```
 
 ## Configuring the Exporter
@@ -42,7 +42,7 @@ Example:
 ```go
 import (
     "context"
-    metricsExporter "github.com/logzio/go-metrics-sdk"
+    metricsExporter "github.com/logzio/go-metrics-sdk/v2"
     "go.opentelemetry.io/otel"
     "go.opentelemetry.io/otel/attribute"
     m "go.opentelemetry.io/otel/metric"
@@ -344,7 +344,7 @@ package main
 
 import (
 	"context"
-	metricsExporter "github.com/logzio/go-metrics-sdk"
+	metricsExporter "github.com/logzio/go-metrics-sdk/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	m "go.opentelemetry.io/otel/metric"

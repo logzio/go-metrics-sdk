@@ -19,7 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	metricsExporter "github.com/logzio/go-metrics-sdk"
+	metricsExporter "github.com/logzio/go-metrics-sdk/v2"
 )
 
 // TestValidate checks whether Validate() returns the correct error and sets the correct
