@@ -1,4 +1,4 @@
-module github.com/logzio/go-metrics-sdk
+module github.com/logzio/go-metrics-sdk/v2
 
 go 1.22.7
 
