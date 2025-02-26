@@ -17,7 +17,7 @@ package metrics_exporter_test
 import (
 	"time"
 
-	metricsExporter "github.com/logzio/go-metrics-sdk"
+	metricsExporter "github.com/logzio/go-metrics-sdk/v2"
 )
 
 // Config struct with default values. This is used to verify the output of Validate().
