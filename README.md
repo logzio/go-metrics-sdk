@@ -28,7 +28,7 @@ for more details on the Remote Write API.
 ## Installation
 
 ```bash
-go get github.com/logzio/go-metrics-sdk
+go get github.com/logzio/go-metrics-sdk/v2
 ```
 
 ## Configuring the Exporter
