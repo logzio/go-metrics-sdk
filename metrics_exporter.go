@@ -21,15 +21,17 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/hashicorp/go-multierror"
 	"maps"
 	"sync"
+
+	"github.com/hashicorp/go-multierror"
+
+	"net/http"
+	"time"
 
 	"go.opentelemetry.io/otel/sdk/instrumentation"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
-	"net/http"
-	"time"
 
 	"github.com/golang/snappy"
 	"github.com/prometheus/prometheus/prompb"
@@ -249,14 +251,23 @@ func convertFromHistogram[N int64 | float64](metricName string, histogram metric
 
 		// Handle histogram buckets
 		for i, bucketCount := range dp.BucketCounts {
-			boundDpLabels["le"] = fmt.Sprintf("%g", dp.Bounds[i])
-			totalCount += float64(dp.BucketCounts[i])
+			// If the length of the bounds is less than the length of the bucket counts, we use the last bucket suffix
+			if i < len(dp.Bounds) {
+				boundDpLabels["le"] = fmt.Sprintf("%g", dp.Bounds[i])
+			} else {
+				boundDpLabels["le"] = histogramLastBucketSuffix
+			}
+			totalCount += float64(bucketCount)
 
 			// Create timeseries for the bucket
-			timeSeries = append(timeSeries, createTimeSeries(float64(bucketCount), dp.Time, boundDpLabels, ex))
+			timeSeries = append(timeSeries, createTimeSeries(totalCount, dp.Time, boundDpLabels, ex))
 		}
-		boundDpLabels["le"] = histogramLastBucketSuffix
-		timeSeries = append(timeSeries, createTimeSeries(totalCount, dp.Time, boundDpLabels, ex))
+
+		// Ensure the last bucket is added
+		if len(dp.BucketCounts) == len(dp.Bounds) {
+			boundDpLabels["le"] = histogramLastBucketSuffix
+			timeSeries = append(timeSeries, createTimeSeries(totalCount, dp.Time, boundDpLabels, ex))
+		}
 	}
 
 	return timeSeries, nil
