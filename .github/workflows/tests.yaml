@@ -1,9 +1,7 @@
 name: Automatic tests and code-coverage
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - master
+  pull_request:
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
