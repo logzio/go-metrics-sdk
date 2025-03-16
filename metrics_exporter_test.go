@@ -16,13 +16,14 @@ package metrics_exporter
 
 import (
 	"fmt"
-	"go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/golang/snappy"
 	"github.com/google/go-cmp/cmp"
@@ -336,4 +337,45 @@ func TestSendRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConvertFromHistogramIndexOutOfRange(t *testing.T) {
+	exporter := Exporter{
+		config: validConfig,
+	}
+
+	// Create a histogram metric with an invalid bucket count to simulate the out-of-range index
+	histogramMetric := &metricdata.ResourceMetrics{
+		ScopeMetrics: []metricdata.ScopeMetrics{
+			{
+				Metrics: []metricdata.Metrics{
+					{
+						Name: "test_histogram",
+						Data: metricdata.Histogram[int64]{
+							DataPoints: []metricdata.HistogramDataPoint[int64]{
+								{
+									Count:        3600,
+									Sum:          15,
+									BucketCounts: []uint64{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},                              // 16 buckets                                                                     // 16 buckets
+									Bounds:       []float64{0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000}, // 15 bounds
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := func() (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("panic occurred: %v", r)
+			}
+		}()
+		_, err = exporter.ConvertToTimeSeries(histogramMetric)
+		return err
+	}()
+
+	require.NoError(t, err, "The code did not convert successfully")
 }
