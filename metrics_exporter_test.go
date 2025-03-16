@@ -356,7 +356,7 @@ func TestConvertFromHistogramIndexOutOfRange(t *testing.T) {
 								{
 									Count:        3600,
 									Sum:          15,
-									BucketCounts: []uint64{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},                              // 16 buckets                                                                     // 16 buckets
+									BucketCounts: []uint64{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},                              // 15 buckets                                                                     // 16 buckets
 									Bounds:       []float64{0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000}, // 15 bounds
 								},
 							},
