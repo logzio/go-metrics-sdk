@@ -3,7 +3,7 @@ module github.com/logzio/go-metrics-sdk/v2
 go 1.22.7
 
 require (
-	github.com/golang/snappy v0.0.4
+	github.com/golang/snappy v1.0.0
 	github.com/google/go-cmp v0.7.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/prometheus/prometheus v0.302.1
